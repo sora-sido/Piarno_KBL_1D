@@ -722,11 +722,23 @@ html, body {
 
 .splash-logo {
   display: flex;
-  gap: 0.18em;
-  font-size: clamp(30px, 7vw, 46px);
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-family: "Lobster", "Brush Script MT", "Segoe Script", cursive;
+  font-size: clamp(48px, 12vw, 72px);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0;
   color: #ffffff;
+}
+
+/* ロゴの「ar」だけ、アプリの指ハイライトと同じ水色系でさりげなく光らせる */
+.logo-accent {
+  color: #7fe6f2;
+  background: linear-gradient(180deg, #b8f6fc 0%, #39d3e6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.35));
 }
 
 .splash-logo span {
@@ -776,6 +788,15 @@ html, body {
 
 @keyframes letter-in {
   to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* 「ar」は登場後に水色の光彩を残す */
+.splash.is-logo .splash-logo .logo-accent {
+  animation-name: letter-in-accent;
+}
+
+@keyframes letter-in-accent {
+  to { opacity: 1; transform: translateY(0); filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.35)); }
 }
 
 @keyframes fade-up {
@@ -834,7 +855,6 @@ html, body {
 .start-modal.is-waiting .start-card,
 .start-modal.is-waiting .start-song-item,
 .start-modal.is-waiting .start-play-btn,
-.start-modal.is-waiting .start-eyebrow,
 .start-modal.is-waiting .start-title {
   animation-play-state: paused;
 }
@@ -844,22 +864,13 @@ html, body {
   animation: card-out 0.4s var(--ease-out) forwards;
 }
 
-.start-eyebrow {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.45em;
-  color: #555555;
-  margin-bottom: 6px;
-  animation: fade-up-in 0.5s var(--ease-out) 0.1s both;
-}
-
 .start-title {
   font-size: 15px;
   font-weight: 700;
   color: #dddddd;
   letter-spacing: 2px;
   margin-bottom: 16px;
-  animation: fade-up-in 0.5s var(--ease-out) 0.16s both;
+  animation: fade-up-in 0.5s var(--ease-out) 0.1s both;
 }
 
 .start-song-list {

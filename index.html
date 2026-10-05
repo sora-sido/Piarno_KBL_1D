@@ -7,6 +7,10 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <title>Hand Tracking</title>
+    <!-- ロゴ用書体 Lobster（読み込めない場合は筆記体系のフォールバック） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lobster&display=swap" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -72,7 +76,7 @@
             <span class="splash-key" data-key="4"><i>ソ</i></span>
           </div>
           <div class="splash-logo">
-            <span>P</span><span>I</span><span>A</span><span>R</span><span>N</span><span>O</span>
+            <span>P</span><span>i</span><span class="logo-accent">a</span><span class="logo-accent">r</span><span>n</span><span>o</span>
           </div>
           <div class="splash-tagline">机が、ピアノになる。</div>
         </div>
@@ -82,7 +86,6 @@
       <!-- 起動時：楽曲選択＆スタートモーダル（モーション付き・白黒ミニマル） -->
       <div id="start-modal" class="start-modal is-waiting">
         <div class="start-card">
-          <div class="start-eyebrow">PIARNO</div>
           <div class="start-title">曲を選択</div>
           <div class="start-song-list">
             <button class="start-song-item selected" data-song="ode_to_joy" style="--i: 0">
