@@ -102,6 +102,15 @@ const NOTE_TO_FREQ_MAP = Object.entries(FREQ_TO_NOTE_MAP).reduce((acc, [f, n]) =
   return acc;
 }, {});
 
+// 任意の音名（"F#4", "B2" 等）を平均律の周波数へ変換（伴奏和音のフォールバック合成用）
+function noteNameToFreq(noteName) {
+  const m = /^([A-G])(#?)(\d)$/.exec(noteName);
+  if (!m) return null;
+  const semis = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] ? 1 : 0);
+  const midi = semis + 12 * (parseInt(m[3], 10) + 1);
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
 /**
  * Tone.js Salamander Grand Piano 音源サンプラーの初期化
  */
@@ -194,7 +203,7 @@ export function ensureAudioContext() {
  * サンプルロード前やエラー時のオシレーター波形合成フォールバック（Web Audio API 加算合成）
  * @param {number} freq 周波数 (Hz)
  */
-function playSynthFallback(freq = 523.25) {
+function playSynthFallback(freq = 523.25, velocity = 1) {
   const ctx = ensureAudioContext();
   if (!ctx) return;
 
@@ -218,7 +227,7 @@ function playSynthFallback(freq = 523.25) {
   gainHarmonic.connect(masterGain);
 
   masterGain.gain.setValueAtTime(0.001, now);
-  masterGain.gain.linearRampToValueAtTime(0.65, now + 0.003);
+  masterGain.gain.linearRampToValueAtTime(0.65 * velocity, now + 0.003);
   // 同音連打時にも音が急峻に切れず自然な余韻が重なるよう減衰時間を延長（0.26s -> 0.55s）
   masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
 
@@ -234,8 +243,9 @@ function playSynthFallback(freq = 523.25) {
  * Salamander Grand Piano実機サンプリング音源によるリアルなピアノ発音
  * @param {number|string} targetFreqOrNote 周波数 (Hz) または 音名 ("C5", "D5" 等)
  * @param {boolean} countAsTap 打鍵回数としてカウントするかどうか（自動伴奏等はfalse）
+ * @param {number} velocity 音量（0〜1）。伴奏はメロディより小さく鳴らす
  */
-export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true) {
+export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true, velocity = 1) {
   ensureAudioContext();
 
   let noteName = null;
@@ -243,7 +253,7 @@ export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true) {
 
   if (typeof targetFreqOrNote === "string") {
     noteName = targetFreqOrNote;
-    freq = NOTE_TO_FREQ_MAP[noteName] || 523.25;
+    freq = NOTE_TO_FREQ_MAP[noteName] || noteNameToFreq(noteName) || 523.25;
   } else if (typeof targetFreqOrNote === "number") {
     freq = targetFreqOrNote;
     const roundedFreq = Math.round(freq * 100) / 100;
@@ -253,14 +263,14 @@ export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true) {
   if (isSamplerLoaded && pianoSampler) {
     try {
       // 2分音符相当の自然な減衰でリアルなピアノを発音
-      pianoSampler.triggerAttackRelease(noteName, "2n");
+      pianoSampler.triggerAttackRelease(noteName, "2n", undefined, velocity);
     } catch (e) {
       console.warn("[AUDIO] Sampler 発音エラー、フォールバック合成を使用:", e);
-      playSynthFallback(freq);
+      playSynthFallback(freq, velocity);
     }
   } else {
     // サンプル音源ロード完了前はフォールバック合成
-    playSynthFallback(freq);
+    playSynthFallback(freq, velocity);
   }
 
   if (countAsTap) {
@@ -471,103 +481,107 @@ export const FINGER_CONFIGS = {
   }
 };
 
-// 『よろこびのうた（Ode to Joy）』運指・音名シーケンス定義（右手5音固定 C5〜G5・自動伴奏 C3〜G3・全16小節/62音）
-// ※演奏者は右手のみを使用します（左手の操作・打鍵指示は一切ありません。低音はアプリ側の自動伴奏音です）
+// 『よろこびのうた（Ode to Joy）』運指・音名シーケンス定義（右手5音固定 C5〜G5・全16小節/62音）
+// 伴奏は pianojuku.info「第九 歓喜の歌」の両手アレンジに準拠（右手の和音の下声部＋左手パート）
+// ※演奏者は右手のみを使用します（和音・左手パートはすべてアプリ側の自動伴奏音です）
+// beats: 次の打鍵までの拍数（4分音符=1）
+// autoChord: 打鍵と同時に鳴らす伴奏音 / autoOffbeat: 打鍵から beat 拍後に鳴らす伴奏音（裏拍の左手など）
+// 小節12の「ソ」は原曲どおり低いソ（G4）を鳴らします（運指は小指のまま）
 // 1:親指(C5/ド), 2:人差し指(D5/レ), 3:中指(E5/ミ★第1音), 4:薬指(F5/ファ), 5:小指(G5/ソ)
 export const ODE_TO_JOY_SEQUENCE = [
   // ==========================================
   // 第1節（フレーズ1）: ミ ミ ファ ソ ｜ ソ ファ ミ レ ｜ ド ド レ ミ ｜ ミ レ レ ─
   // ==========================================
-  // 小節1: ミ ミ ファ ソ - 自動伴奏: C3
-  { step: 1,  phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: "C3" },
-  { step: 2,  phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 3,  phrase: 1, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
-  { step: 4,  phrase: 1, fingerNum: 5, fingerKey: "PINKY",  note: "ソ", rightNote: "G5", freq: 783.99, autoLeftNote: null },
-  // 小節2: ソ ファ ミ レ - 自動伴奏: G3
-  { step: 5,  phrase: 1, fingerNum: 5, fingerKey: "PINKY",  note: "ソ", rightNote: "G5", freq: 783.99, autoLeftNote: "G3" },
-  { step: 6,  phrase: 1, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
-  { step: 7,  phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 8,  phrase: 1, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  // 小節3: ド ド レ ミ - 自動伴奏: C3
-  { step: 9,  phrase: 1, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: "C3" },
-  { step: 10, phrase: 1, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: null },
-  { step: 11, phrase: 1, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  { step: 12, phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  // 小節4: ミ レ レ ─ - 自動伴奏: G3
-  { step: 13, phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: "G3" },
-  { step: 14, phrase: 1, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  { step: 15, phrase: 1, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
+  // 小節1: ミ ミ ファ ソ - 伴奏コード: C
+  { step: 1,  phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["C3", "C4", "C5"], autoOffbeat: [] },
+  { step: 2,  phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["C5"], autoOffbeat: [{ beat: 0.5, notes: ["C3", "C4"] }] },
+  { step: 3,  phrase: 1, fingerNum: 4, fingerKey: "RING",   note: "ファ",  rightNote: "F5", freq: 698.46, beats: 1, autoChord: ["E3", "C4", "D5"], autoOffbeat: [] },
+  { step: 4,  phrase: 1, fingerNum: 5, fingerKey: "PINKY",  note: "ソ",   rightNote: "G5", freq: 783.99, beats: 1, autoChord: ["G3", "E5"], autoOffbeat: [] },
+  // 小節2: ソ ファ ミ レ - 伴奏コード: G
+  { step: 5,  phrase: 1, fingerNum: 5, fingerKey: "PINKY",  note: "ソ",   rightNote: "G5", freq: 783.99, beats: 1, autoChord: ["G2", "G3", "E5"], autoOffbeat: [] },
+  { step: 6,  phrase: 1, fingerNum: 4, fingerKey: "RING",   note: "ファ",  rightNote: "F5", freq: 698.46, beats: 1, autoChord: ["D5"], autoOffbeat: [{ beat: 0.5, notes: ["G2", "G3"] }] },
+  { step: 7,  phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["B2", "G3", "C5"], autoOffbeat: [] },
+  { step: 8,  phrase: 1, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["D3", "G4"], autoOffbeat: [] },
+  // 小節3: ド ド レ ミ - 伴奏コード: C
+  { step: 9,  phrase: 1, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 1, autoChord: ["C3", "G3", "E4", "G4"], autoOffbeat: [] },
+  { step: 10, phrase: 1, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 1, autoChord: ["E4"], autoOffbeat: [{ beat: 0.5, notes: ["C3", "G3"] }] },
+  { step: 11, phrase: 1, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["E3", "G3", "G4"], autoOffbeat: [] },
+  { step: 12, phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["G2", "E4", "G4", "C5"], autoOffbeat: [] },
+  // 小節4: ミ レ レ ─ - 伴奏コード: C→G
+  { step: 13, phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1.5, autoChord: ["C3", "G4", "C5"], autoOffbeat: [{ beat: 0.5, notes: ["C4"] }, { beat: 1, notes: ["G3"] }] },
+  { step: 14, phrase: 1, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 0.5, autoChord: ["E3", "B4"], autoOffbeat: [] },
+  { step: 15, phrase: 1, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 2, autoChord: ["B2", "D4", "G4", "B4"], autoOffbeat: [{ beat: 1, notes: ["G3"] }] },
 
   // ==========================================
   // 第2節（フレーズ2）: ミ ミ ファ ソ ｜ ソ ファ ミ レ ｜ ド ド レ ミ ｜ レ ド ド ─
   // ==========================================
-  // 小節5: ミ ミ ファ ソ - 自動伴奏: C3
-  { step: 16, phrase: 2, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: "C3" },
-  { step: 17, phrase: 2, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 18, phrase: 2, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
-  { step: 19, phrase: 2, fingerNum: 5, fingerKey: "PINKY",  note: "ソ", rightNote: "G5", freq: 783.99, autoLeftNote: null },
-  // 小節6: ソ ファ ミ レ - 自動伴奏: G3
-  { step: 20, phrase: 2, fingerNum: 5, fingerKey: "PINKY",  note: "ソ", rightNote: "G5", freq: 783.99, autoLeftNote: "G3" },
-  { step: 21, phrase: 2, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
-  { step: 22, phrase: 2, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 23, phrase: 2, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  // 小節7: ド ド レ ミ - 自動伴奏: C3
-  { step: 24, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: "C3" },
-  { step: 25, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: null },
-  { step: 26, phrase: 2, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  { step: 27, phrase: 2, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  // 小節8: レ ド ド ─ - 自動伴奏: C3
-  { step: 28, phrase: 2, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: "C3" },
-  { step: 29, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: null },
-  { step: 30, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: null },
+  // 小節5: ミ ミ ファ ソ - 伴奏コード: C
+  { step: 16, phrase: 2, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["C3", "C4", "C5"], autoOffbeat: [] },
+  { step: 17, phrase: 2, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["C5"], autoOffbeat: [{ beat: 0.5, notes: ["C3", "C4"] }] },
+  { step: 18, phrase: 2, fingerNum: 4, fingerKey: "RING",   note: "ファ",  rightNote: "F5", freq: 698.46, beats: 1, autoChord: ["E3", "C4", "D5"], autoOffbeat: [] },
+  { step: 19, phrase: 2, fingerNum: 5, fingerKey: "PINKY",  note: "ソ",   rightNote: "G5", freq: 783.99, beats: 1, autoChord: ["G3", "E5"], autoOffbeat: [] },
+  // 小節6: ソ ファ ミ レ - 伴奏コード: G
+  { step: 20, phrase: 2, fingerNum: 5, fingerKey: "PINKY",  note: "ソ",   rightNote: "G5", freq: 783.99, beats: 1, autoChord: ["G2", "G3", "E5"], autoOffbeat: [] },
+  { step: 21, phrase: 2, fingerNum: 4, fingerKey: "RING",   note: "ファ",  rightNote: "F5", freq: 698.46, beats: 1, autoChord: ["D5"], autoOffbeat: [{ beat: 0.5, notes: ["G2", "G3"] }] },
+  { step: 22, phrase: 2, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["B2", "G3", "C5"], autoOffbeat: [] },
+  { step: 23, phrase: 2, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["D3", "G4"], autoOffbeat: [] },
+  // 小節7: ド ド レ ミ - 伴奏コード: C
+  { step: 24, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 1, autoChord: ["C3", "G3", "E4", "G4"], autoOffbeat: [] },
+  { step: 25, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 1, autoChord: ["E4"], autoOffbeat: [{ beat: 0.5, notes: ["C3", "G3"] }] },
+  { step: 26, phrase: 2, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["E3", "G3", "G4"], autoOffbeat: [] },
+  { step: 27, phrase: 2, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["G2", "E4", "G4", "C5"], autoOffbeat: [] },
+  // 小節8: レ ド ド ─ - 伴奏コード: G→C
+  { step: 28, phrase: 2, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1.5, autoChord: ["B2", "D3", "G3", "D4", "G4", "B4"], autoOffbeat: [] },
+  { step: 29, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 0.5, autoChord: ["E4"], autoOffbeat: [] },
+  { step: 30, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 2, autoChord: ["G3", "E4", "G4"], autoOffbeat: [{ beat: 1, notes: ["C3"] }] },
 
   // ==========================================
   // 第3節（フレーズ3）: レ レ ミ ド ｜ レ ミ(短) ファ(短) ミ ド ｜ レ ミ(短) ファ(短) ミ レ ｜ ド レ ソ ─
   // ==========================================
-  // 小節9: レ レ ミ ド - 自動伴奏: G3
-  { step: 31, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: "G3" },
-  { step: 32, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  { step: 33, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 34, phrase: 3, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: null },
-  // 小節10: レ ミ(短) ファ(短) ミ ド - 自動伴奏: G3
-  { step: 35, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: "G3" },
-  { step: 36, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 37, phrase: 3, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
-  { step: 38, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 39, phrase: 3, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: null },
-  // 小節11: レ ミ(短) ファ(短) ミ レ - 自動伴奏: G3
-  { step: 40, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: "G3" },
-  { step: 41, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 42, phrase: 3, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
-  { step: 43, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 44, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  // 小節12: ド レ ソ ─ - 自動伴奏: C3
-  { step: 45, phrase: 3, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: "C3" },
-  { step: 46, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  { step: 47, phrase: 3, fingerNum: 5, fingerKey: "PINKY",  note: "ソ", rightNote: "G5", freq: 783.99, autoLeftNote: null },
+  // 小節9: レ レ ミ ド - 伴奏コード: G→C
+  { step: 31, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["G2", "G3", "B4"], autoOffbeat: [] },
+  { step: 32, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["B4"], autoOffbeat: [{ beat: 0.5, notes: ["G2", "G3"] }] },
+  { step: 33, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["G2", "G3", "C5"], autoOffbeat: [] },
+  { step: 34, phrase: 3, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 1, autoChord: ["C3", "E3", "E4"], autoOffbeat: [] },
+  // 小節10: レ ミ(短) ファ(短) ミ ド - 伴奏コード: G→C
+  { step: 35, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["G2", "G3", "B4"], autoOffbeat: [] },
+  { step: 36, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 0.5, autoChord: ["C5"], autoOffbeat: [] },
+  { step: 37, phrase: 3, fingerNum: 4, fingerKey: "RING",   note: "ファ",  rightNote: "F5", freq: 698.46, beats: 0.5, autoChord: ["G2", "G3", "D5"], autoOffbeat: [] },
+  { step: 38, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["G2", "G3", "C5"], autoOffbeat: [] },
+  { step: 39, phrase: 3, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 1, autoChord: ["C3", "E3", "E4"], autoOffbeat: [] },
+  // 小節11: レ ミ(短) ファ(短) ミ レ - 伴奏コード: G→Am→E
+  { step: 40, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["G2", "G3", "B4"], autoOffbeat: [] },
+  { step: 41, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 0.5, autoChord: ["C5"], autoOffbeat: [] },
+  { step: 42, phrase: 3, fingerNum: 4, fingerKey: "RING",   note: "ファ",  rightNote: "F5", freq: 698.46, beats: 0.5, autoChord: ["G2", "G3", "D5"], autoOffbeat: [] },
+  { step: 43, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["A2", "A3", "B4"], autoOffbeat: [] },
+  { step: 44, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["E3", "B4"], autoOffbeat: [] },
+  // 小節12: ド レ ソ(低) ＋4拍目に次のミ(step 48)を先取りしタイで小節13へ - 伴奏コード: Am→D→G
+  { step: 45, phrase: 3, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 1, autoChord: ["A2", "C3", "A4"], autoOffbeat: [] },
+  { step: 46, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["D3", "G3", "F#4"], autoOffbeat: [] },
+  { step: 47, phrase: 3, fingerNum: 5, fingerKey: "PINKY",  note: "ソ",   rightNote: "G4", freq: 392.00, beats: 1, autoChord: ["G2", "G3", "B3"], autoOffbeat: [] },
 
   // ==========================================
   // 第4節（フレーズ4）: ミ ミ ファ ソ ｜ ソ ファ ミ レ ｜ ド ド レ ミ ｜ レ ド ド ─
   // ==========================================
-  // 小節13: ミ ミ ファ ソ - 自動伴奏: C3
-  { step: 48, phrase: 4, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: "C3" },
-  { step: 49, phrase: 4, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 50, phrase: 4, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
-  { step: 51, phrase: 4, fingerNum: 5, fingerKey: "PINKY",  note: "ソ", rightNote: "G5", freq: 783.99, autoLeftNote: null },
-  // 小節14: ソ ファ ミ レ - 自動伴奏: G3
-  { step: 52, phrase: 4, fingerNum: 5, fingerKey: "PINKY",  note: "ソ", rightNote: "G5", freq: 783.99, autoLeftNote: "G3" },
-  { step: 53, phrase: 4, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
-  { step: 54, phrase: 4, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 55, phrase: 4, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  // 小節15: ド ド レ ミ - 自動伴奏: C3
-  { step: 56, phrase: 4, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: "C3" },
-  { step: 57, phrase: 4, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: null },
-  { step: 58, phrase: 4, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  { step: 59, phrase: 4, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  // 小節16: レ ド ド ─ - 自動伴奏: C3
-  { step: 60, phrase: 4, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: "C3" },
-  { step: 61, phrase: 4, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: null },
-  { step: 62, phrase: 4, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: null }
+  // 小節13: (⌒ミ) ミ ファ ソ - 伴奏コード: G→C（step 48 は小節12の4拍目に打鍵、1拍後に C3+C4）
+  { step: 48, phrase: 4, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 2, autoChord: ["G2", "E3", "C5"], autoOffbeat: [{ beat: 1, notes: ["C3", "C4"] }] },
+  { step: 49, phrase: 4, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["C5"], autoOffbeat: [{ beat: 0.5, notes: ["C3", "C4"] }] },
+  { step: 50, phrase: 4, fingerNum: 4, fingerKey: "RING",   note: "ファ",  rightNote: "F5", freq: 698.46, beats: 1, autoChord: ["E3", "C4", "D5"], autoOffbeat: [] },
+  { step: 51, phrase: 4, fingerNum: 5, fingerKey: "PINKY",  note: "ソ",   rightNote: "G5", freq: 783.99, beats: 1, autoChord: ["G3", "E5"], autoOffbeat: [] },
+  // 小節14: ソ ファ ミ レ - 伴奏コード: G
+  { step: 52, phrase: 4, fingerNum: 5, fingerKey: "PINKY",  note: "ソ",   rightNote: "G5", freq: 783.99, beats: 1, autoChord: ["G2", "G3", "E5"], autoOffbeat: [] },
+  { step: 53, phrase: 4, fingerNum: 4, fingerKey: "RING",   note: "ファ",  rightNote: "F5", freq: 698.46, beats: 1, autoChord: ["D5"], autoOffbeat: [{ beat: 0.5, notes: ["G2", "G3"] }] },
+  { step: 54, phrase: 4, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["B2", "G3", "C5"], autoOffbeat: [] },
+  { step: 55, phrase: 4, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["D3", "G4"], autoOffbeat: [] },
+  // 小節15: ド ド レ ミ - 伴奏コード: C
+  { step: 56, phrase: 4, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 1, autoChord: ["C3", "G3", "E4", "G4"], autoOffbeat: [] },
+  { step: 57, phrase: 4, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 1, autoChord: ["E4"], autoOffbeat: [{ beat: 0.5, notes: ["C3", "G3"] }] },
+  { step: 58, phrase: 4, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1, autoChord: ["E3", "G3", "G4"], autoOffbeat: [] },
+  { step: 59, phrase: 4, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, beats: 1, autoChord: ["G2", "E4", "G4", "C5"], autoOffbeat: [] },
+  // 小節16: レ ド ド ─ - 伴奏コード: G→C
+  { step: 60, phrase: 4, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, beats: 1.5, autoChord: ["B2", "D3", "G3", "D4", "G4", "B4"], autoOffbeat: [] },
+  { step: 61, phrase: 4, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 0.5, autoChord: ["E4"], autoOffbeat: [] },
+  { step: 62, phrase: 4, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, beats: 2, autoChord: ["C3", "E3", "G3", "E4", "G4"], autoOffbeat: [] }
 ];
 
 // 『メリーさんのひつじ（Mary Had a Little Lamb）』運指・音名シーケンス定義（右手4音 C5, D5, E5, G5・自動伴奏 C3, G3・全8小節/26音）
@@ -635,6 +649,70 @@ export let currentSongId = "ode_to_joy";
 export let currentSequence = SONGS.ode_to_joy.sequence;
 export let currentSongStep = 0; // 現在の進行ステップ (0 〜 sequence.length - 1)
 export let currentFingerKey = currentSequence[0].fingerKey; // 初期ターゲット指: MIDDLE (3: ミ)
+
+// ==========================================
+// 自動伴奏（和音・裏拍）の発音管理
+// ==========================================
+const ACCOMP_VELOCITY = 0.45;          // 伴奏音量（メロディ=1）
+const DEFAULT_BEAT_MS = 600;           // 打鍵テンポが未計測のときの1拍の長さ
+const MIN_BEAT_MS = 250;
+const MAX_BEAT_MS = 1500;
+let estimatedBeatMs = DEFAULT_BEAT_MS; // 演奏者の打鍵ペースから推定した1拍の長さ
+let lastHitTime = null;
+let lastHitBeats = null;
+let pendingOffbeatTimers = [];
+
+function cancelPendingOffbeats() {
+  pendingOffbeatTimers.forEach((id) => clearTimeout(id));
+  pendingOffbeatTimers = [];
+}
+
+/**
+ * 伴奏状態のリセット（曲の切り替え・ループ時）
+ */
+export function resetAccompaniment() {
+  cancelPendingOffbeats();
+  estimatedBeatMs = DEFAULT_BEAT_MS;
+  lastHitTime = null;
+  lastHitBeats = null;
+}
+
+/**
+ * 打鍵した音符の伴奏を鳴らす
+ * - autoChord: 打鍵と同時に発音
+ * - autoOffbeat: 推定テンポに合わせて打鍵の beat 拍後に発音（次の打鍵が先に来たら取り消し）
+ * - autoLeftNote: 単音伴奏のみの曲（メリーさんのひつじ等）との互換
+ * @param {object} target 打鍵したシーケンス要素
+ */
+function playAccompaniment(target) {
+  const now = performance.now();
+  // 前回の打鍵からの経過時間 ÷ 前の音符の拍数 で1拍の長さを推定（極端な値は除外し平滑化）
+  if (lastHitTime !== null && lastHitBeats) {
+    const beatMs = (now - lastHitTime) / lastHitBeats;
+    if (beatMs >= MIN_BEAT_MS && beatMs <= MAX_BEAT_MS) {
+      estimatedBeatMs = estimatedBeatMs * 0.6 + beatMs * 0.4;
+    }
+  }
+  lastHitTime = now;
+  lastHitBeats = target.beats || 1;
+
+  cancelPendingOffbeats();
+
+  if (Array.isArray(target.autoChord)) {
+    target.autoChord.forEach((n) => playTapSound(n, false, ACCOMP_VELOCITY));
+  } else if (target.autoLeftNote) {
+    playTapSound(target.autoLeftNote, false);
+  }
+
+  if (Array.isArray(target.autoOffbeat)) {
+    target.autoOffbeat.forEach(({ beat, notes }) => {
+      const id = setTimeout(() => {
+        notes.forEach((n) => playTapSound(n, false, ACCOMP_VELOCITY));
+      }, beat * estimatedBeatMs);
+      pendingOffbeatTimers.push(id);
+    });
+  }
+}
 
 // 3秒カウントダウン状態管理
 export let isCountingDown = false;
@@ -752,6 +830,7 @@ export function selectSong(songId, withCountdown = true) {
   currentSongId = songId;
   currentSequence = SONGS[songId].sequence;
   currentSongStep = 0;
+  resetAccompaniment();
 
   // 右上ポップアップメニューのアクティブクラス更新
   document.querySelectorAll(".song-menu-item").forEach((btn) => {
@@ -2255,14 +2334,12 @@ function drawRawHandLandmarks(results) {
       // 右手正解メロディ音を発音
       playTapSound(currentTarget.rightNote || currentTarget.freq, true);
 
-      // 自動伴奏（autoLeftNote）が設定されている場合は即座に重ねて発音（プレイヤーの打鍵操作は不要）
-      if (currentTarget.autoLeftNote) {
-        playTapSound(currentTarget.autoLeftNote, false);
-      }
+      // 自動伴奏（和音・左手パート）を重ねて発音（プレイヤーの打鍵操作は不要）
+      playAccompaniment(currentTarget);
       updateStateHud("TOUCHED", true);
 
       console.log(
-        `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
+        `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}${currentTarget.autoChord ? ` [自動伴奏: ${currentTarget.autoChord.join("+")}]` : currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
       );
 
       // 打鍵直前の指先座標を記録
@@ -2276,6 +2353,7 @@ function drawRawHandLandmarks(results) {
         console.log(`[SONG COMPLETE] 全${currentSequence.length}音を完走！クリア通知を表示します`);
         showClearNotification(() => {
           currentSongStep = 0;
+          resetAccompaniment();
           const resetTarget = currentSequence[0];
           setTargetFinger(resetTarget.fingerKey);
           renderSongGuideUI();
