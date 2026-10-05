@@ -538,13 +538,13 @@ export const ODE_TO_JOY_SEQUENCE = [
   // 小節11: レ ミ(短) ファ(短) ミ レ - 自動伴奏: G3
   { step: 40, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: "G3" },
   { step: 41, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
-  { step: 42, phrase: 4, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
+  { step: 42, phrase: 3, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null },
   { step: 43, phrase: 3, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ", rightNote: "E5", freq: 659.25, autoLeftNote: null },
   { step: 44, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
   // 小節12: ド レ ソ ─ - 自動伴奏: C3
   { step: 45, phrase: 3, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: "C3" },
   { step: 46, phrase: 3, fingerNum: 2, fingerKey: "INDEX",  note: "レ", rightNote: "D5", freq: 587.33, autoLeftNote: null },
-  { step: 47, phrase: 3, fingerNum: 5, fingerKey: "PINKY",  note: "ソ", rightNote: "G5", freq: 783.99, autoLeftNote: "G3" },
+  { step: 47, phrase: 3, fingerNum: 5, fingerKey: "PINKY",  note: "ソ", rightNote: "G5", freq: 783.99, autoLeftNote: null },
 
   // ==========================================
   // 第4節（フレーズ4）: ミ ミ ファ ソ ｜ ソ ファ ミ レ ｜ ド ド レ ミ ｜ レ ド ド ─
