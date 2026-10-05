@@ -1773,7 +1773,7 @@ function prepareApp() {
 
 /**
  * 起動スプラッシュの演出
- * 鍵盤がせり上がり、よろこびのうたの最初の4音（ミ ミ ファ ソ）を順に打鍵 → ロゴ表示 → 曲選択画面へ
+ * 鍵盤がせり上がる → ロゴ表示 → 曲選択画面へ
  * 画面タップでスキップ。動きを減らす設定の端末では即座に曲選択画面を表示する
  */
 function runSplash() {
@@ -1803,21 +1803,8 @@ function runSplash() {
     return;
   }
 
-  const keys = splash.querySelectorAll(".splash-key");
-  const hit = (index) => {
-    const key = keys[index];
-    if (!key) return;
-    key.classList.remove("is-hit");
-    void key.offsetWidth; // 同じ鍵盤の連打でもアニメーションを最初から再生する
-    key.classList.add("is-hit");
-  };
-
-  // ミ ミ ファ ソ（鍵盤インデックス 2, 2, 3, 4）を四分音符のリズムで打鍵
-  [2, 2, 3, 4].forEach((keyIndex, n) => {
-    timers.push(setTimeout(() => hit(keyIndex), 900 + n * 260));
-  });
-  timers.push(setTimeout(() => splash.classList.add("is-logo"), 1900));
-  timers.push(setTimeout(finish, 3300));
+  timers.push(setTimeout(() => splash.classList.add("is-logo"), 800));
+  timers.push(setTimeout(finish, 2400));
 
   splash.addEventListener("click", finish, { once: true });
 }

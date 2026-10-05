@@ -651,7 +651,7 @@ html, body {
 }
 
 /* ==========================================================================
-   起動スプラッシュ：鍵盤がせり上がる → ミ ミ ファ ソ を打鍵 → ロゴが現れる
+   起動スプラッシュ：鍵盤がせり上がる → ロゴが現れる
    ========================================================================== */
 .splash {
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -720,29 +720,6 @@ html, body {
   letter-spacing: 0.5px;
 }
 
-/* 打鍵：鍵盤が沈み、光の波紋が広がる */
-.splash-key.is-hit {
-  animation: key-rise 0.7s var(--ease-spring) forwards, key-press 0.32s ease-out;
-}
-
-.splash-key.is-hit::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 22px;
-  width: 14px;
-  height: 14px;
-  margin-left: -7px;
-  border-radius: 50%;
-  border: 2px solid rgba(0, 229, 255, 0.9);
-  animation: key-ripple 0.6s ease-out forwards;
-  pointer-events: none;
-}
-
-.splash-key.is-hit i {
-  color: #00b8cc;
-}
-
 .splash-logo {
   display: flex;
   gap: 0.18em;
@@ -795,17 +772,6 @@ html, body {
 
 @keyframes key-rise {
   to { opacity: 1; transform: translateY(0) rotateX(0deg); }
-}
-
-@keyframes key-press {
-  0% { transform: translateY(0) rotateX(0deg); }
-  35% { transform: translateY(5px) rotateX(9deg); box-shadow: inset 0 -2px 0 #cfcfcf, 0 0 26px rgba(0, 229, 255, 0.55); }
-  100% { transform: translateY(0) rotateX(0deg); }
-}
-
-@keyframes key-ripple {
-  from { transform: scale(1); opacity: 1; }
-  to { transform: scale(5); opacity: 0; }
 }
 
 @keyframes letter-in {
