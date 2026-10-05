@@ -23,11 +23,14 @@
       <!-- メイン映像コンテナ（ビデオとCanvasを自然比率で完全重畳） -->
       <div class="video-container">
         <video id="webcam" playsinline autoplay muted></video>
+        <!-- デフォルメ表示（ドット絵・シルエット）。認識には元の映像を使い、表示だけを置き換える -->
+        <canvas id="stylized-view" class="stylized-view"></canvas>
         <canvas id="output-canvas"></canvas>
       </div>
 
       <!-- 画面右上：楽曲選択丸ボタン＆ポップアップメニュー -->
       <div class="song-select-container">
+        <button id="view-mode-btn" class="view-mode-btn" aria-label="映像の見え方を切り替え" title="映像の見え方を切り替え">ドット絵</button>
         <button id="song-select-btn" class="song-select-btn" aria-label="楽曲選択" title="楽曲選択">♪</button>
         <div id="song-select-menu" class="song-select-menu hidden">
           <div class="song-menu-header">曲を選択</div>
@@ -65,22 +68,15 @@
           </div>
         </div>
       </div>
-      <!-- 起動スプラッシュ：鍵盤がせり上がり、ロゴが現れる -->
+      <!-- 起動スプラッシュ：背景写真の上にロゴが現れる -->
       <div id="splash" class="splash" aria-hidden="true">
+        <div class="splash-bg"></div>
         <div class="splash-stage">
-          <div class="splash-keys">
-            <span class="splash-key" data-key="0"><i>ド</i></span>
-            <span class="splash-key" data-key="1"><i>レ</i></span>
-            <span class="splash-key" data-key="2"><i>ミ</i></span>
-            <span class="splash-key" data-key="3"><i>ファ</i></span>
-            <span class="splash-key" data-key="4"><i>ソ</i></span>
-          </div>
           <div class="splash-logo">
             <span>P</span><span>i</span><span class="logo-accent">a</span><span class="logo-accent">r</span><span>n</span><span>o</span>
           </div>
-          <div class="splash-tagline">机が、ピアノになる。</div>
+          <div class="splash-tagline">Piano✕AIで誰もがピアニストに</div>
         </div>
-        <div class="splash-skip">タップでスキップ</div>
       </div>
 
       <!-- 起動時：楽曲選択＆スタートモーダル（モーション付き・白黒ミニマル） -->

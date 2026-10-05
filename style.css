@@ -49,6 +49,35 @@ html, body {
   transform: scaleX(-1);
 }
 
+/* デフォルメ表示：低解像度で描いた映像を拡大し、ドット絵やシルエットにする（鏡像反転は映像と同じ） */
+.stylized-view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  image-rendering: pixelated;
+  pointer-events: none;
+  display: none;
+}
+
+.video-container[data-view="pixel"] .stylized-view,
+.video-container[data-view="silhouette"] .stylized-view {
+  display: block;
+}
+
+/* デフォルメ中は元の映像を見せない（認識用に再生は続ける） */
+.video-container[data-view="pixel"] #webcam,
+.video-container[data-view="silhouette"] #webcam {
+  opacity: 0;
+}
+
+.video-container[data-view="silhouette"] .stylized-view {
+  image-rendering: auto;
+  filter: grayscale(1) brightness(0.42) contrast(1.7) blur(5px);
+}
+
 /* 骨格描画Canvas：ビデオと完全に同一点・同一比率で重畳、同じく鏡像反転 */
 #output-canvas {
   position: absolute;
@@ -194,6 +223,34 @@ html, body {
   right: calc(16px + env(safe-area-inset-right, 0px));
   z-index: 200;
   pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* 映像の見え方切り替え（ドット絵 → シルエット → そのまま） */
+.view-mode-btn {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 19px;
+  background-color: rgba(20, 20, 20, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.view-mode-btn:hover {
+  background-color: rgba(50, 50, 50, 0.95);
+}
+
+.view-mode-btn:active {
+  transform: scale(0.95);
 }
 
 /* 右上の丸いボタン（直径38px・白黒シンプル） */
@@ -651,7 +708,7 @@ html, body {
 }
 
 /* ==========================================================================
-   起動スプラッシュ：鍵盤がせり上がる → ロゴが現れる
+   起動スプラッシュ：暗くした背景写真の上にロゴが現れる
    ========================================================================== */
 .splash {
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -667,6 +724,41 @@ html, body {
   transition: opacity 0.6s var(--ease-out), visibility 0.6s, transform 0.6s var(--ease-out);
 }
 
+/* 背景写真（public/images/splash-bg.jpg）。黒を重ねて暗くし、ゆっくりズームさせる。写真がなければ黒のグラデーションのみ */
+.splash-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.splash-bg::before {
+  content: "";
+  position: absolute;
+  inset: -4%;
+  background: url("./images/splash-bg.jpg") center 60% / cover no-repeat;
+  filter: grayscale(0.35) contrast(1.05);
+  animation: bg-drift 14s ease-out both;
+}
+
+.splash-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(90% 70% at 50% 50%, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.82) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.75) 100%);
+}
+
+.splash-stage {
+  position: relative;
+}
+
+@keyframes bg-drift {
+  from { transform: scale(1.12); opacity: 0; }
+  12% { opacity: 1; }
+  to { transform: scale(1.0); opacity: 1; }
+}
+
 .splash.is-leaving {
   opacity: 0;
   visibility: hidden;
@@ -678,52 +770,15 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 26px;
-}
-
-.splash-keys {
-  display: flex;
-  gap: 6px;
-  perspective: 600px;
-}
-
-.splash-key {
-  position: relative;
-  width: clamp(38px, 9vw, 56px);
-  height: clamp(110px, 24vw, 160px);
-  border-radius: 0 0 9px 9px;
-  background: linear-gradient(180deg, #f4f4f4 0%, #ffffff 70%, #e4e4e4 100%);
-  box-shadow: inset 0 -6px 0 #cfcfcf, 0 10px 30px rgba(0, 0, 0, 0.6);
-  transform-origin: top center;
-  opacity: 0;
-  transform: translateY(40px) rotateX(-35deg);
-  animation: key-rise 0.7s var(--ease-spring) forwards;
-  animation-delay: calc(0.08s * var(--k, 0) + 0.15s);
-}
-
-.splash-key:nth-child(1) { --k: 0; }
-.splash-key:nth-child(2) { --k: 1; }
-.splash-key:nth-child(3) { --k: 2; }
-.splash-key:nth-child(4) { --k: 3; }
-.splash-key:nth-child(5) { --k: 4; }
-
-.splash-key i {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 14px;
+  gap: 14px;
+  padding-inline: 16px;
   text-align: center;
-  font-style: normal;
-  font-size: 11px;
-  font-weight: 700;
-  color: #9a9a9a;
-  letter-spacing: 0.5px;
 }
 
 .splash-logo {
   display: flex;
   font-family: "Lobster", "Brush Script MT", "Segoe Script", cursive;
-  font-size: clamp(48px, 12vw, 72px);
+  font-size: clamp(76px, 22vw, 132px);
   font-weight: 400;
   line-height: 1.1;
   letter-spacing: 0;
@@ -761,29 +816,15 @@ html, body {
 .splash-logo span:nth-child(6) { --l: 5; }
 
 .splash-tagline {
-  font-size: 13px;
-  color: #8a8a8a;
-  letter-spacing: 0.4em;
+  font-size: clamp(12px, 3.4vw, 15px);
+  color: #9a9a9a;
+  letter-spacing: 0.18em;
   opacity: 0;
   transform: translateY(8px);
 }
 
 .splash.is-logo .splash-tagline {
   animation: fade-up 0.7s var(--ease-out) 0.35s forwards;
-}
-
-.splash-skip {
-  position: absolute;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  color: #555555;
-  opacity: 0;
-  animation: fade-up 0.6s ease 1s forwards;
-}
-
-@keyframes key-rise {
-  to { opacity: 1; transform: translateY(0) rotateX(0deg); }
 }
 
 @keyframes letter-in {
