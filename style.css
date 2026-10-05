@@ -743,7 +743,7 @@ html, body {
   content: "";
   position: absolute;
   inset: -4%;
-  background: url("./images/splash-bg.jpg") center 60% / cover no-repeat;
+  background: url("./images/splash-bg.jpg") 58% 72% / cover no-repeat; /* 手元（打鍵している手）が中心に来る位置 */
   filter: grayscale(0.35) contrast(1.05);
   animation: bg-drift 14s ease-out both;
 }
