@@ -2008,6 +2008,12 @@ function updateCanvasResolution() {
   if (video.videoWidth && video.videoHeight) {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
+    // 表示枠の縦横比をカメラ映像に合わせ、低解像度カメラでも画面いっぱいに拡大表示する
+    const container = video.parentElement;
+    if (container) {
+      container.style.setProperty("--video-ar", `${video.videoWidth} / ${video.videoHeight}`);
+      container.style.setProperty("--video-ar-num", `${video.videoWidth / video.videoHeight}`);
+    }
   }
 }
 
