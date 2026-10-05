@@ -1133,23 +1133,23 @@ export function renderSongGuideUI() {
 /**
  * 現在の音符のハイライト色を取得
  * - 複数弾く指（同一指の連続）：1打目＝黄色、2打目＝緑色、3打目＝青色
- * - 単発（1回のみ弾く指）：水色（シアン）
+ * - 単発（1回のみ弾く指）：ワインレッド（テーマカラー）
  * @param {number} stepIndex
  */
 export function getTargetFingerColor(stepIndex) {
   const current = currentSequence[stepIndex];
   if (!current) {
     return {
-      stroke: "rgba(0, 229, 255, 0.95)",
-      halo: "rgba(0, 229, 255, 0.25)",
-      accent: "rgba(0, 229, 255, 0.65)",
-      glow: "rgba(0, 229, 255, 0.8)",
-      fill: "#00e5ff",
-      r: 0,
-      g: 229,
-      b: 255,
-      rgb: "0, 229, 255",
-      name: "cyan"
+      stroke: "rgba(200, 54, 80, 0.95)",
+      halo: "rgba(200, 54, 80, 0.25)",
+      accent: "rgba(200, 54, 80, 0.65)",
+      glow: "rgba(200, 54, 80, 0.8)",
+      fill: "#c83650",
+      r: 200,
+      g: 54,
+      b: 80,
+      rgb: "200, 54, 80",
+      name: "wine"
     };
   }
 
@@ -1214,18 +1214,18 @@ export function getTargetFingerColor(stepIndex) {
     }
   }
 
-  // 単発: 水色 (Cyan)
+  // 単発: ワインレッド (テーマカラー)
   return {
-    stroke: "rgba(0, 229, 255, 0.95)",
-    halo: "rgba(0, 229, 255, 0.25)",
-    accent: "rgba(0, 229, 255, 0.65)",
-    glow: "rgba(0, 229, 255, 0.85)",
-    fill: "#00e5ff",
-    r: 0,
-    g: 229,
-    b: 255,
-    rgb: "0, 229, 255",
-    name: "cyan"
+    stroke: "rgba(200, 54, 80, 0.95)",
+    halo: "rgba(200, 54, 80, 0.25)",
+    accent: "rgba(200, 54, 80, 0.65)",
+    glow: "rgba(200, 54, 80, 0.85)",
+    fill: "#c83650",
+    r: 200,
+    g: 54,
+    b: 80,
+    rgb: "200, 54, 80",
+    name: "wine"
   };
 }
 
@@ -1250,7 +1250,7 @@ export function spawnBeamEffect(fromX, fromY, toX, toY, color) {
   const midY = (fromY + toY) / 2 - Math.min(80, Math.max(30, dist * 0.35));
 
   // RGB文字列の事前キャッシュ（ループ内の正規表現全廃のため）
-  const colorRgb = color?.rgb || (color?.r !== undefined ? `${color.r}, ${color.g}, ${color.b}` : "0, 229, 255");
+  const colorRgb = color?.rgb || (color?.r !== undefined ? `${color.r}, ${color.g}, ${color.b}` : "200, 54, 80");
 
   tapVisualEffects.push({
     type: "beam",
@@ -1301,7 +1301,7 @@ export function updateAndDrawTapEffects(ctx) {
       const trailLen = fx.trail.length;
       if (trailLen > 1) {
         const BATCH_COUNT = 3;
-        const colorRgb = fx.colorRgb || fx.color?.rgb || "0, 229, 255";
+        const colorRgb = fx.colorRgb || fx.color?.rgb || "200, 54, 80";
 
         // パス1: 外側のネオン光条ライン（3バッチにまとめてドローコール削減）
         for (let s = 0; s < BATCH_COUNT; s++) {
@@ -2692,7 +2692,7 @@ function drawRawHandLandmarks(results) {
   };
 
   // 層1: 外側発光ハローライン（太さ 12px、半透明カラーでブラー相当のグロー感を表現）
-  canvasCtx.strokeStyle = targetColor.halo || "rgba(0, 229, 255, 0.25)";
+  canvasCtx.strokeStyle = targetColor.halo || "rgba(200, 54, 80, 0.25)";
   canvasCtx.lineWidth = 12.0;
   drawBonePath();
   canvasCtx.stroke();
@@ -2714,7 +2714,7 @@ function drawRawHandLandmarks(results) {
     // 層1: 外側ハロー
     canvasCtx.beginPath();
     canvasCtx.arc(pt.x, pt.y, 8.0, 0, 2 * Math.PI);
-    canvasCtx.fillStyle = targetColor.halo || "rgba(0, 229, 255, 0.25)";
+    canvasCtx.fillStyle = targetColor.halo || "rgba(200, 54, 80, 0.25)";
     canvasCtx.fill();
 
     // 層2: メインカラードット
@@ -2745,10 +2745,10 @@ function drawRawHandLandmarks(results) {
  * @param {object} color
  */
 function drawTipTargetMark(x, y, color) {
-  const strokeColor = color?.stroke || "rgba(0, 229, 255, 0.95)";
-  const haloColor = color?.halo || "rgba(0, 229, 255, 0.25)";
-  const accentColor = color?.accent || "rgba(0, 229, 255, 0.65)";
-  const fillColor = color?.fill || "#00e5ff";
+  const strokeColor = color?.stroke || "rgba(200, 54, 80, 0.95)";
+  const haloColor = color?.halo || "rgba(200, 54, 80, 0.25)";
+  const accentColor = color?.accent || "rgba(200, 54, 80, 0.65)";
+  const fillColor = color?.fill || "#c83650";
 
   canvasCtx.save();
 

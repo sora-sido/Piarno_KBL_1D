@@ -8,6 +8,14 @@
   padding: 0;
 }
 
+:root {
+  /* テーマカラー：白黒＋ピアノの鍵盤カバー（キーカバー）のような深いワインレッド */
+  --wine-deep: #4f0b18;
+  --wine: #8e1b30;
+  --wine-bright: #c83650;
+  --wine-glow: rgba(200, 54, 80, 0.45);
+}
+
 html, body {
   background-color: #000000;
   color: #ffffff;
@@ -785,15 +793,15 @@ html, body {
   color: #ffffff;
 }
 
-/* ロゴの「ar」だけ、アプリの指ハイライトと同じ水色系でさりげなく光らせる */
+/* ロゴの「ar」だけ、鍵盤カバーのような重厚なワインレッドに（ベルベットの光沢をグラデーションで表現） */
 .logo-accent {
-  color: #7fe6f2;
-  background: linear-gradient(180deg, #b8f6fc 0%, #39d3e6 100%);
+  color: var(--wine-bright);
+  background: linear-gradient(180deg, #d75a70 0%, var(--wine-bright) 30%, var(--wine) 65%, var(--wine-deep) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: none;
-  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.35));
+  filter: drop-shadow(0 0 12px var(--wine-glow));
 }
 
 .splash-logo span {
@@ -831,13 +839,13 @@ html, body {
   to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
-/* 「ar」は登場後に水色の光彩を残す */
+/* 「ar」は登場後にワインレッドの光彩を残す */
 .splash.is-logo .splash-logo .logo-accent {
   animation-name: letter-in-accent;
 }
 
 @keyframes letter-in-accent {
-  to { opacity: 1; transform: translateY(0); filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.35)); }
+  to { opacity: 1; transform: translateY(0); filter: drop-shadow(0 0 12px var(--wine-glow)); }
 }
 
 @keyframes fade-up {
@@ -953,8 +961,8 @@ html, body {
   bottom: 18%;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #ffffff;
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.7);
+  background: var(--wine-bright);
+  box-shadow: 0 0 12px var(--wine-glow);
   transform: scaleY(0);
   transition: transform 0.35s var(--ease-out);
 }
@@ -971,8 +979,8 @@ html, body {
 }
 
 .start-song-item.selected {
-  background-color: #262626;
-  border-color: #ffffff;
+  background-color: #241417;
+  border-color: var(--wine);
   color: #ffffff;
   font-weight: 600;
 }
@@ -1106,7 +1114,7 @@ html, body {
 
 @keyframes btn-glow {
   0%, 100% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
-  50% { box-shadow: 0 0 24px rgba(255, 255, 255, 0.35); }
+  50% { box-shadow: 0 0 26px var(--wine-glow); }
 }
 
 /* 動きを減らす設定の端末ではアニメーションを止め、すぐ表示する */
