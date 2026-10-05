@@ -1766,6 +1766,60 @@ function prepareApp() {
 
   // 起動モーダルのイベント初期化
   setupStartModal();
+
+  // 起動スプラッシュ（鍵盤とロゴのモーション）→ 曲選択画面へ
+  runSplash();
+}
+
+/**
+ * 起動スプラッシュの演出
+ * 鍵盤がせり上がり、よろこびのうたの最初の4音（ミ ミ ファ ソ）を順に打鍵 → ロゴ表示 → 曲選択画面へ
+ * 画面タップでスキップ。動きを減らす設定の端末では即座に曲選択画面を表示する
+ */
+function runSplash() {
+  const splash = document.getElementById("splash");
+  const reveal = () => {
+    if (startModal) startModal.classList.remove("is-waiting");
+  };
+  if (!splash) {
+    reveal();
+    return;
+  }
+
+  const timers = [];
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    timers.forEach((id) => clearTimeout(id));
+    splash.classList.add("is-leaving");
+    reveal();
+    setTimeout(() => splash.remove(), 700);
+  };
+
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduceMotion) {
+    finish();
+    return;
+  }
+
+  const keys = splash.querySelectorAll(".splash-key");
+  const hit = (index) => {
+    const key = keys[index];
+    if (!key) return;
+    key.classList.remove("is-hit");
+    void key.offsetWidth; // 同じ鍵盤の連打でもアニメーションを最初から再生する
+    key.classList.add("is-hit");
+  };
+
+  // ミ ミ ファ ソ（鍵盤インデックス 2, 2, 3, 4）を四分音符のリズムで打鍵
+  [2, 2, 3, 4].forEach((keyIndex, n) => {
+    timers.push(setTimeout(() => hit(keyIndex), 900 + n * 260));
+  });
+  timers.push(setTimeout(() => splash.classList.add("is-logo"), 1900));
+  timers.push(setTimeout(finish, 3300));
+
+  splash.addEventListener("click", finish, { once: true });
 }
 
 /**
@@ -1776,12 +1830,27 @@ function setupStartModal() {
 
   const startSongItems = document.querySelectorAll(".start-song-item");
   startSongItems.forEach((item) => {
+    // 音数を曲データから表示
+    const count = item.querySelector(".start-song-count");
+    const song = SONGS[item.dataset.song];
+    if (count && song) count.textContent = `${song.sequence.length}音`;
+
+    // 登場アニメーションが終わったら固定し、以降は選択時のはずみだけ再生する
+    item.addEventListener("animationend", (e) => {
+      if (e.animationName === "item-in") item.classList.add("is-in");
+      if (e.animationName === "item-pick") item.classList.remove("is-picked");
+    });
+
     item.addEventListener("click", (e) => {
       e.stopPropagation();
       const songId = item.dataset.song;
       if (!songId || !SONGS[songId]) return;
 
       selectedStartSongId = songId;
+
+      item.classList.remove("is-picked");
+      void item.offsetWidth;
+      item.classList.add("is-picked");
 
       // 選択状態のUI更新
       startSongItems.forEach((btn) => {

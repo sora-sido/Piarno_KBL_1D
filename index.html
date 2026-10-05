@@ -61,19 +61,41 @@
           </div>
         </div>
       </div>
-      <!-- 起動時：楽曲選択＆スタートモーダル（シンプル・白黒ミニマル） -->
-      <div id="start-modal" class="start-modal">
+      <!-- 起動スプラッシュ：鍵盤がせり上がり、よろこびのうたの最初の4音（ミ ミ ファ ソ）を打鍵してロゴが現れる -->
+      <div id="splash" class="splash" aria-hidden="true">
+        <div class="splash-stage">
+          <div class="splash-keys">
+            <span class="splash-key" data-key="0"><i>ド</i></span>
+            <span class="splash-key" data-key="1"><i>レ</i></span>
+            <span class="splash-key" data-key="2"><i>ミ</i></span>
+            <span class="splash-key" data-key="3"><i>ファ</i></span>
+            <span class="splash-key" data-key="4"><i>ソ</i></span>
+          </div>
+          <div class="splash-logo">
+            <span>P</span><span>I</span><span>A</span><span>R</span><span>N</span><span>O</span>
+          </div>
+          <div class="splash-tagline">机が、ピアノになる。</div>
+        </div>
+        <div class="splash-skip">タップでスキップ</div>
+      </div>
+
+      <!-- 起動時：楽曲選択＆スタートモーダル（モーション付き・白黒ミニマル） -->
+      <div id="start-modal" class="start-modal is-waiting">
         <div class="start-card">
+          <div class="start-eyebrow">PIARNO</div>
           <div class="start-title">曲を選択</div>
           <div class="start-song-list">
-            <button class="start-song-item selected" data-song="ode_to_joy">
+            <button class="start-song-item selected" data-song="ode_to_joy" style="--i: 0">
               <span class="start-song-name">よろこびのうた</span>
+              <span class="start-song-meta"><span class="start-song-count"></span><span class="start-song-level" aria-label="難易度2">●●○</span></span>
             </button>
-            <button class="start-song-item" data-song="mary_had_a_little_lamb">
+            <button class="start-song-item" data-song="mary_had_a_little_lamb" style="--i: 1">
               <span class="start-song-name">メリーさんのひつじ</span>
+              <span class="start-song-meta"><span class="start-song-count"></span><span class="start-song-level" aria-label="難易度1">●○○</span></span>
             </button>
-            <button class="start-song-item" data-song="saints">
+            <button class="start-song-item" data-song="saints" style="--i: 2">
               <span class="start-song-name">聖者の行進</span>
+              <span class="start-song-meta"><span class="start-song-count"></span><span class="start-song-level" aria-label="難易度3">●●●</span></span>
             </button>
           </div>
           <button id="start-play-btn" class="start-play-btn">

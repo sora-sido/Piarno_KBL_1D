@@ -651,9 +651,176 @@ html, body {
 }
 
 /* ==========================================================================
-   起動時：楽曲選択＆スタートモーダル（シンプル・白黒ミニマル）
+   起動スプラッシュ：鍵盤がせり上がる → ミ ミ ファ ソ を打鍵 → ロゴが現れる
+   ========================================================================== */
+.splash {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: absolute;
+  inset: 0;
+  z-index: 420;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(120% 90% at 50% 60%, #141414 0%, #000000 70%);
+  cursor: pointer;
+  transition: opacity 0.6s var(--ease-out), visibility 0.6s, transform 0.6s var(--ease-out);
+}
+
+.splash.is-leaving {
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(1.06);
+  pointer-events: none;
+}
+
+.splash-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+}
+
+.splash-keys {
+  display: flex;
+  gap: 6px;
+  perspective: 600px;
+}
+
+.splash-key {
+  position: relative;
+  width: clamp(38px, 9vw, 56px);
+  height: clamp(110px, 24vw, 160px);
+  border-radius: 0 0 9px 9px;
+  background: linear-gradient(180deg, #f4f4f4 0%, #ffffff 70%, #e4e4e4 100%);
+  box-shadow: inset 0 -6px 0 #cfcfcf, 0 10px 30px rgba(0, 0, 0, 0.6);
+  transform-origin: top center;
+  opacity: 0;
+  transform: translateY(40px) rotateX(-35deg);
+  animation: key-rise 0.7s var(--ease-spring) forwards;
+  animation-delay: calc(0.08s * var(--k, 0) + 0.15s);
+}
+
+.splash-key:nth-child(1) { --k: 0; }
+.splash-key:nth-child(2) { --k: 1; }
+.splash-key:nth-child(3) { --k: 2; }
+.splash-key:nth-child(4) { --k: 3; }
+.splash-key:nth-child(5) { --k: 4; }
+
+.splash-key i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  text-align: center;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: #9a9a9a;
+  letter-spacing: 0.5px;
+}
+
+/* 打鍵：鍵盤が沈み、光の波紋が広がる */
+.splash-key.is-hit {
+  animation: key-rise 0.7s var(--ease-spring) forwards, key-press 0.32s ease-out;
+}
+
+.splash-key.is-hit::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 229, 255, 0.9);
+  animation: key-ripple 0.6s ease-out forwards;
+  pointer-events: none;
+}
+
+.splash-key.is-hit i {
+  color: #00b8cc;
+}
+
+.splash-logo {
+  display: flex;
+  gap: 0.18em;
+  font-size: clamp(30px, 7vw, 46px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #ffffff;
+}
+
+.splash-logo span {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(18px);
+  filter: blur(6px);
+}
+
+.splash.is-logo .splash-logo span {
+  animation: letter-in 0.6s var(--ease-out) forwards;
+  animation-delay: calc(0.05s * var(--l, 0));
+}
+
+.splash-logo span:nth-child(1) { --l: 0; }
+.splash-logo span:nth-child(2) { --l: 1; }
+.splash-logo span:nth-child(3) { --l: 2; }
+.splash-logo span:nth-child(4) { --l: 3; }
+.splash-logo span:nth-child(5) { --l: 4; }
+.splash-logo span:nth-child(6) { --l: 5; }
+
+.splash-tagline {
+  font-size: 13px;
+  color: #8a8a8a;
+  letter-spacing: 0.4em;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.splash.is-logo .splash-tagline {
+  animation: fade-up 0.7s var(--ease-out) 0.35s forwards;
+}
+
+.splash-skip {
+  position: absolute;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: #555555;
+  opacity: 0;
+  animation: fade-up 0.6s ease 1s forwards;
+}
+
+@keyframes key-rise {
+  to { opacity: 1; transform: translateY(0) rotateX(0deg); }
+}
+
+@keyframes key-press {
+  0% { transform: translateY(0) rotateX(0deg); }
+  35% { transform: translateY(5px) rotateX(9deg); box-shadow: inset 0 -2px 0 #cfcfcf, 0 0 26px rgba(0, 229, 255, 0.55); }
+  100% { transform: translateY(0) rotateX(0deg); }
+}
+
+@keyframes key-ripple {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(5); opacity: 0; }
+}
+
+@keyframes letter-in {
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+@keyframes fade-up {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   起動時：楽曲選択＆スタートモーダル（モーション付き・白黒ミニマル）
    ========================================================================== */
 .start-modal {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   position: absolute;
   inset: 0;
   width: 100%;
@@ -667,7 +834,13 @@ html, body {
   z-index: 390;
   padding: 16px;
   opacity: 1;
-  transition: opacity 0.25s ease, visibility 0.25s ease;
+  transition: opacity 0.45s var(--ease-out), visibility 0.45s;
+}
+
+/* スプラッシュ表示中は待機（カードはまだ出さない） */
+.start-modal.is-waiting {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .start-modal.hidden {
@@ -679,24 +852,48 @@ html, body {
 .start-card {
   background-color: #111111;
   border: 1px solid #333333;
-  border-radius: 8px;
-  max-width: 300px;
+  border-radius: 12px;
+  max-width: 320px;
   width: 100%;
-  padding: 22px 20px;
+  padding: 24px 20px 20px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  animation: card-in 0.6s var(--ease-out) both;
+  transition: transform 0.45s var(--ease-out), opacity 0.45s var(--ease-out), filter 0.45s;
+}
+
+.start-modal.is-waiting .start-card,
+.start-modal.is-waiting .start-song-item,
+.start-modal.is-waiting .start-play-btn,
+.start-modal.is-waiting .start-eyebrow,
+.start-modal.is-waiting .start-title {
+  animation-play-state: paused;
+}
+
+/* スタート押下後：カードが奥へ沈んで消える */
+.start-modal.hidden .start-card {
+  animation: card-out 0.4s var(--ease-out) forwards;
+}
+
+.start-eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.45em;
+  color: #555555;
+  margin-bottom: 6px;
+  animation: fade-up-in 0.5s var(--ease-out) 0.1s both;
 }
 
 .start-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #888888;
-  letter-spacing: 1px;
-  margin-bottom: 14px;
-  text-transform: uppercase;
+  font-size: 15px;
+  font-weight: 700;
+  color: #dddddd;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+  animation: fade-up-in 0.5s var(--ease-out) 0.16s both;
 }
 
 .start-song-list {
@@ -708,26 +905,51 @@ html, body {
 }
 
 .start-song-item {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 10px;
   background-color: #181818;
   border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  padding: 11px 14px;
+  border-radius: 8px;
+  padding: 12px 14px;
   color: #aaaaaa;
   font-size: 13.5px;
   cursor: pointer;
-  text-align: center;
-  transition: all 0.15s ease;
+  text-align: left;
   user-select: none;
   width: 100%;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.25s var(--ease-out);
+  animation: item-in 0.55s var(--ease-out) both;
+  animation-delay: calc(0.24s + 0.07s * var(--i, 0));
+}
+
+/* 選択中の曲：左端の光るバーが伸びる */
+.start-song-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #ffffff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.7);
+  transform: scaleY(0);
+  transition: transform 0.35s var(--ease-out);
 }
 
 .start-song-item:hover {
   background-color: #222222;
   color: #ffffff;
   border-color: #444444;
+  transform: translateX(3px);
+}
+
+.start-song-item:active {
+  transform: scale(0.98);
 }
 
 .start-song-item.selected {
@@ -737,11 +959,47 @@ html, body {
   font-weight: 600;
 }
 
+.start-song-item.selected::before {
+  transform: scaleY(1);
+}
+
+/* 登場アニメーション後は固定し、選んだ瞬間だけ小さくはずませる */
+.start-song-item.is-in {
+  animation: none;
+}
+
+.start-song-item.is-in.is-picked {
+  animation: item-pick 0.35s var(--ease-out);
+}
+
 .start-song-name {
   letter-spacing: 0.5px;
 }
 
+.start-song-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #666666;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.start-song-item.selected .start-song-meta {
+  color: #aaaaaa;
+}
+
+.start-song-level {
+  font-size: 7px;
+  letter-spacing: 2px;
+}
+
 .start-play-btn {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   display: inline-flex;
   align-items: center;
@@ -749,31 +1007,97 @@ html, body {
   background-color: #ffffff;
   color: #000000;
   border: 1px solid #ffffff;
-  border-radius: 6px;
-  padding: 12px 16px;
+  border-radius: 8px;
+  padding: 13px 16px;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 1.5px;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   user-select: none;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, transform 0.2s var(--ease-out), box-shadow 0.3s ease;
+  animation: item-in 0.55s var(--ease-out) 0.5s both, btn-glow 2.4s ease-in-out 1.2s infinite;
+}
+
+/* 光が横切るシマー */
+.start-play-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 30%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+  transform: skewX(-20deg);
+  animation: shimmer 2.4s ease-in-out 1.2s infinite;
+  pointer-events: none;
 }
 
 .start-play-btn:hover {
-  background-color: #e0e0e0;
-  border-color: #e0e0e0;
+  background-color: #e8e8e8;
+  border-color: #e8e8e8;
   transform: translateY(-1px);
 }
 
 .start-play-btn:active {
-  transform: translateY(0);
+  transform: scale(0.97);
   background-color: #cccccc;
 }
 
 .start-play-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  opacity: 0.75;
+  cursor: progress;
   transform: none;
+  animation: none;
+}
+
+.start-play-btn:disabled::after {
+  animation: shimmer 1s linear infinite;
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes card-out {
+  from { opacity: 1; transform: scale(1); filter: blur(0); }
+  to { opacity: 0; transform: scale(0.92) translateY(10px); filter: blur(4px); }
+}
+
+@keyframes fade-up-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes item-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes item-pick {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { left: -40%; }
+  60%, 100% { left: 120%; }
+}
+
+@keyframes btn-glow {
+  0%, 100% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
+  50% { box-shadow: 0 0 24px rgba(255, 255, 255, 0.35); }
+}
+
+/* 動きを減らす設定の端末ではアニメーションを止め、すぐ表示する */
+@media (prefers-reduced-motion: reduce) {
+  .splash *, .splash, .start-modal *, .start-modal {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
