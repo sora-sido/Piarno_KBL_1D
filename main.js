@@ -2266,7 +2266,7 @@ const VIEW_MODES = [
   { id: "silhouette", label: "シルエット" },
   { id: "raw", label: "そのまま" }
 ];
-const PIXEL_VIEW_WIDTH = 88;       // ドット絵の横のマス数（小さいほど粗くなる）
+const PIXEL_VIEW_WIDTH = 144;      // ドット絵の横のマス数（小さいほど粗くなる）
 const SILHOUETTE_VIEW_WIDTH = 160; // シルエットは縮小してからぼかすので少し細かめ
 const PIXEL_COLOR_LEVELS = 5;      // ドット絵の色数（各色チャンネルの段階数）
 
