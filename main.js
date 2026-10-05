@@ -653,7 +653,7 @@ export let currentFingerKey = currentSequence[0].fingerKey; // 初期ターゲ�
 // ==========================================
 // 自動伴奏（和音・裏拍）の発音管理
 // ==========================================
-const ACCOMP_VELOCITY = 0.45;          // 伴奏音量（メロディ=1）
+const ACCOMP_VELOCITY = 0.7;           // 伴奏音量（メロディ=1）
 const DEFAULT_BEAT_MS = 600;           // 打鍵テンポが未計測のときの1拍の長さ
 const MIN_BEAT_MS = 250;
 const MAX_BEAT_MS = 1500;
