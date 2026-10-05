@@ -149,14 +149,20 @@ function initPianoSampler() {
         A7: "A7.mp3",
         C8: "C8.mp3"
       },
-      // 同音連打（ミ・ミ、ド・ド等）時に音が不自然にチョップされず、自然なピアノの減衰・オーバーラップが持続するようリリースを拡張
-      release: 2.4,
+      // 鍵盤（ダンパー）が戻ったときの消音フェード。ペダル踏み替え時に前の和音がふわっと消える長さ
+      release: 1.6,
       baseUrl: "https://tonejs.github.io/audio/salamander/",
       onload: () => {
         isSamplerLoaded = true;
         console.log("[AUDIO] Salamander Grand Piano サンプル音源のロードが完了しました");
       }
-    }).toDestination();
+    });
+
+    // 余韻づくり：ピアノ → ホール残響（Reverb） → 音割れ防止（Compressor/Limiter） → 出力
+    const reverb = new Tone.Reverb({ decay: 2.8, preDelay: 0.012, wet: 0.24 });
+    const compressor = new Tone.Compressor({ threshold: -18, ratio: 2.5, attack: 0.01, release: 0.25 });
+    const limiter = new Tone.Limiter(-1);
+    pianoSampler.chain(reverb, compressor, limiter, Tone.getDestination());
   } catch (err) {
     console.warn("[AUDIO] Tone.Sampler 初期化エラー:", err);
   }
@@ -228,15 +234,48 @@ function playSynthFallback(freq = 523.25, velocity = 1) {
 
   masterGain.gain.setValueAtTime(0.001, now);
   masterGain.gain.linearRampToValueAtTime(0.65 * velocity, now + 0.003);
-  // 同音連打時にも音が急峻に切れず自然な余韻が重なるよう減衰時間を延長（0.26s -> 0.55s）
-  masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+  // サンプル音源が読み込めない場合でもピアノに近い余韻になるよう、ゆっくり減衰させる
+  masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
 
   masterGain.connect(ctx.destination);
 
   oscBase.start(now);
   oscHarmonic.start(now);
-  oscBase.stop(now + 0.56);
-  oscHarmonic.stop(now + 0.56);
+  oscBase.stop(now + 1.42);
+  oscHarmonic.stop(now + 1.42);
+}
+
+// 発音中の音の管理（実際のピアノの「鍵盤を押さえている間」と「ダンパーペダル」を再現）
+let heldMelodyNote = null;          // 鳴らし続けているメロディ音（次のメロディ打鍵で離鍵＝レガート）
+const pedalNotes = new Set();       // ペダルで伸ばしている伴奏音（ペダル踏み替えでまとめて消音）
+
+/**
+ * ペダルの踏み替え：伸ばしていた伴奏音を自然なフェードで消音する
+ */
+export function pedalChange() {
+  if (pianoSampler && isSamplerLoaded && pedalNotes.size) {
+    try {
+      pianoSampler.triggerRelease([...pedalNotes], Tone.now());
+    } catch (e) {
+      console.warn("[AUDIO] ペダル踏み替えエラー:", e);
+    }
+  }
+  pedalNotes.clear();
+}
+
+/**
+ * 発音中のすべての音を止める（曲の切り替え時など）
+ */
+export function releaseAllNotes() {
+  if (pianoSampler && isSamplerLoaded) {
+    try {
+      pianoSampler.releaseAll(Tone.now());
+    } catch (e) {
+      console.warn("[AUDIO] 全消音エラー:", e);
+    }
+  }
+  pedalNotes.clear();
+  heldMelodyNote = null;
 }
 
 /**
@@ -244,8 +283,12 @@ function playSynthFallback(freq = 523.25, velocity = 1) {
  * @param {number|string} targetFreqOrNote 周波数 (Hz) または 音名 ("C5", "D5" 等)
  * @param {boolean} countAsTap 打鍵回数としてカウントするかどうか（自動伴奏等はfalse）
  * @param {number} velocity 音量（0〜1）。伴奏はメロディより小さく鳴らす
+ * @param {"oneshot"|"melody"|"pedal"} mode 伸ばし方
+ *   - oneshot: 一定時間で離鍵（テスト音など）
+ *   - melody : 次のメロディ打鍵まで鳴らし続け、自然に減衰（レガート）
+ *   - pedal  : 次のペダル踏み替えまで伸ばす（伴奏の和音・低音）
  */
-export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true, velocity = 1) {
+export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true, velocity = 1, mode = "oneshot") {
   ensureAudioContext();
 
   let noteName = null;
@@ -262,8 +305,26 @@ export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true, veloc
 
   if (isSamplerLoaded && pianoSampler) {
     try {
-      // 2分音符相当の自然な減衰でリアルなピアノを発音
-      pianoSampler.triggerAttackRelease(noteName, "2n", undefined, velocity);
+      // 人間の演奏らしさ：強さをわずかに揺らし、和音の各音もほんの数ミリ秒ずらす
+      const humanVelocity = Math.min(1, Math.max(0.05, velocity * (0.94 + Math.random() * 0.1)));
+      const time = Tone.now() + (mode === "pedal" ? Math.random() * 0.008 : 0);
+
+      if (mode === "melody") {
+        // 前のメロディ音を離鍵してから次の音を打鍵（同じ音の連打でも打ち直しが自然に聞こえる）
+        if (heldMelodyNote !== null) {
+          pianoSampler.triggerRelease(heldMelodyNote, time);
+        }
+        pianoSampler.triggerAttack(noteName, time, humanVelocity);
+        heldMelodyNote = noteName;
+      } else if (mode === "pedal") {
+        if (pedalNotes.has(noteName)) {
+          pianoSampler.triggerRelease(noteName, time);
+        }
+        pianoSampler.triggerAttack(noteName, time, humanVelocity);
+        pedalNotes.add(noteName);
+      } else {
+        pianoSampler.triggerAttackRelease(noteName, "2n", time, humanVelocity);
+      }
     } catch (e) {
       console.warn("[AUDIO] Sampler 発音エラー、フォールバック合成を使用:", e);
       playSynthFallback(freq, velocity);
@@ -653,7 +714,8 @@ export let currentFingerKey = currentSequence[0].fingerKey; // 初期ターゲ�
 // ==========================================
 // 自動伴奏（和音・裏拍）の発音管理
 // ==========================================
-const ACCOMP_VELOCITY = 0.7;           // 伴奏音量（メロディ=1）
+const MELODY_VELOCITY = 0.85;         // メロディ音量
+const ACCOMP_VELOCITY = 0.55;          // 伴奏音量（和音が重なるのでメロディより控えめに）
 const DEFAULT_BEAT_MS = 600;           // 打鍵テンポが未計測のときの1拍の長さ
 const MIN_BEAT_MS = 250;
 const MAX_BEAT_MS = 1500;
@@ -661,6 +723,12 @@ let estimatedBeatMs = DEFAULT_BEAT_MS; // 演奏者の打鍵ペースから推�
 let lastHitTime = null;
 let lastHitBeats = null;
 let pendingOffbeatTimers = [];
+
+// C4（中央のド）より低い音か
+function isBassNote(noteName) {
+  const m = /^[A-G]#?(\d)$/.exec(noteName);
+  return !!m && parseInt(m[1], 10) < 4;
+}
 
 function cancelPendingOffbeats() {
   pendingOffbeatTimers.forEach((id) => clearTimeout(id));
@@ -698,16 +766,17 @@ function playAccompaniment(target) {
 
   cancelPendingOffbeats();
 
-  if (Array.isArray(target.autoChord)) {
-    target.autoChord.forEach((n) => playTapSound(n, false, ACCOMP_VELOCITY));
-  } else if (target.autoLeftNote) {
-    playTapSound(target.autoLeftNote, false);
+  // 低音（C4未満）が鳴る拍でペダルを踏み替え、前の和音の響きを自然に消してから新しい和音を伸ばす
+  const chord = Array.isArray(target.autoChord) ? target.autoChord : target.autoLeftNote ? [target.autoLeftNote] : [];
+  if (chord.some(isBassNote)) {
+    pedalChange();
   }
+  chord.forEach((n) => playTapSound(n, false, ACCOMP_VELOCITY, "pedal"));
 
   if (Array.isArray(target.autoOffbeat)) {
     target.autoOffbeat.forEach(({ beat, notes }) => {
       const id = setTimeout(() => {
-        notes.forEach((n) => playTapSound(n, false, ACCOMP_VELOCITY));
+        notes.forEach((n) => playTapSound(n, false, ACCOMP_VELOCITY, "pedal"));
       }, beat * estimatedBeatMs);
       pendingOffbeatTimers.push(id);
     });
@@ -831,6 +900,7 @@ export function selectSong(songId, withCountdown = true) {
   currentSequence = SONGS[songId].sequence;
   currentSongStep = 0;
   resetAccompaniment();
+  releaseAllNotes();
 
   // 右上ポップアップメニューのアクティブクラス更新
   document.querySelectorAll(".song-menu-item").forEach((btn) => {
@@ -2338,7 +2408,7 @@ function drawRawHandLandmarks(results) {
       const currentTarget = currentSequence[currentSongStep];
 
       // 右手正解メロディ音を発音
-      playTapSound(currentTarget.rightNote || currentTarget.freq, true);
+      playTapSound(currentTarget.rightNote || currentTarget.freq, true, MELODY_VELOCITY, "melody");
 
       // 自動伴奏（和音・左手パート）を重ねて発音（プレイヤーの打鍵操作は不要）
       playAccompaniment(currentTarget);
