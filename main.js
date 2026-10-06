@@ -773,16 +773,19 @@ export const SONGS = {
   ode_to_joy: {
     id: "ode_to_joy",
     title: "よろこびのうた",
+    bpm: 100, // カウントインと伴奏の基準テンポ（演奏中は打鍵ペースに追従）
     sequence: ODE_TO_JOY_SEQUENCE
   },
   mary_had_a_little_lamb: {
     id: "mary_had_a_little_lamb",
     title: "メリーさんのひつじ",
+    bpm: 100,
     sequence: MARY_HAD_A_LITTLE_LAMB_SEQUENCE
   },
   saints: {
     id: "saints",
     title: "聖者の行進",
+    bpm: 120,
     sequence: SAINTS_SEQUENCE
   }
 };
@@ -797,13 +800,25 @@ export let currentFingerKey = currentSequence[0].fingerKey; // 初期ターゲ�
 // ==========================================
 const MELODY_VELOCITY = 0.85;         // メロディ音量
 const ACCOMP_VELOCITY = 0.55;          // 伴奏音量（和音が重なるのでメロディより控えめに）
-const DEFAULT_BEAT_MS = 600;           // 打鍵テンポが未計測のときの1拍の長さ
-const MIN_BEAT_MS = 250;
-const MAX_BEAT_MS = 1500;
+const DEFAULT_BEAT_MS = 600;           // 曲にテンポ指定がないときの1拍の長さ（♩=100）
+const MIN_BEAT_MS = 250;               // ♩=240 より速い打鍵間隔は誤検出として無視
+const MAX_BEAT_MS = 1500;              // ♩=40 より遅い間隔は「待っていた」とみなして無視
+const TEMPO_SAMPLE_COUNT = 3;          // テンポ推定に使う直近の打鍵間隔の数（中央値をとる）
+const TEMPO_FOLLOW_RATE = 0.7;         // 新しい推定値を反映する割合（大きいほど素早く追従）
+const TEMPO_MAX_SAMPLE_BEATS = 2;      // これより長い音符の間隔はテンポ推定に使わない（伸ばす長さは人によってまちまちなため）
 let estimatedBeatMs = DEFAULT_BEAT_MS; // 演奏者の打鍵ペースから推定した1拍の長さ
+let tempoSamples = [];
 let lastHitTime = null;
 let lastHitBeats = null;
-let pendingOffbeatTimers = [];
+let pendingOffbeats = [];              // 予約中の裏拍伴奏 { id, notes }
+
+/**
+ * 現在の曲の基準テンポ（1拍のミリ秒）
+ */
+function getSongBeatMs() {
+  const bpm = SONGS[currentSongId]?.bpm;
+  return bpm ? 60000 / bpm : DEFAULT_BEAT_MS;
+}
 
 // C4（中央のド）より低い音か
 function isBassNote(noteName) {
@@ -812,8 +827,38 @@ function isBassNote(noteName) {
 }
 
 function cancelPendingOffbeats() {
-  pendingOffbeatTimers.forEach((id) => clearTimeout(id));
-  pendingOffbeatTimers = [];
+  pendingOffbeats.forEach((p) => clearTimeout(p.id));
+  pendingOffbeats = [];
+}
+
+/**
+ * 次の打鍵が予約中の裏拍伴奏より先に来たときの処理
+ * 取り消して伴奏がスカスカになるのを防ぐため、まだ鳴っていない最初の1つだけをその場で前倒しして鳴らす
+ * （新しい音符が低音を伴う場合は和音が濁るので前倒ししない）
+ * @param {boolean} nextHasBass 新しく打鍵した音符の伴奏に低音が含まれるか
+ */
+function flushPendingOffbeats(nextHasBass) {
+  const first = pendingOffbeats[0];
+  cancelPendingOffbeats();
+  if (first && !nextHasBass) {
+    first.notes.forEach((n) => playTapSound(n, false, ACCOMP_VELOCITY, "pedal"));
+  }
+}
+
+/**
+ * 打鍵間隔から1拍の長さを推定する
+ * 直近の間隔の中央値をとって外れ値に強くしつつ、新しい値を大きく反映して速さの変化に素早く追従する
+ */
+function updateTempoEstimate(now) {
+  if (lastHitTime === null || !lastHitBeats || lastHitBeats > TEMPO_MAX_SAMPLE_BEATS) return;
+  const beatMs = (now - lastHitTime) / lastHitBeats;
+  if (beatMs < MIN_BEAT_MS || beatMs > MAX_BEAT_MS) return;
+
+  tempoSamples.push(beatMs);
+  if (tempoSamples.length > TEMPO_SAMPLE_COUNT) tempoSamples.shift();
+  const sorted = [...tempoSamples].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  estimatedBeatMs = estimatedBeatMs * (1 - TEMPO_FOLLOW_RATE) + median * TEMPO_FOLLOW_RATE;
 }
 
 /**
@@ -821,7 +866,8 @@ function cancelPendingOffbeats() {
  */
 export function resetAccompaniment() {
   cancelPendingOffbeats();
-  estimatedBeatMs = DEFAULT_BEAT_MS;
+  estimatedBeatMs = getSongBeatMs();
+  tempoSamples = [];
   lastHitTime = null;
   lastHitBeats = null;
 }
@@ -829,52 +875,74 @@ export function resetAccompaniment() {
 /**
  * 打鍵した音符の伴奏を鳴らす
  * - autoChord: 打鍵と同時に発音
- * - autoOffbeat: 推定テンポに合わせて打鍵の beat 拍後に発音（次の打鍵が先に来たら取り消し）
+ * - autoOffbeat: 推定テンポに合わせて打鍵の beat 拍後に発音（次の打鍵が先に来たら最初の1つを前倒し）
  * - autoLeftNote: 単音伴奏のみの曲（メリーさんのひつじ等）との互換
  * @param {object} target 打鍵したシーケンス要素
  */
 function playAccompaniment(target) {
   const now = performance.now();
-  // 前回の打鍵からの経過時間 ÷ 前の音符の拍数 で1拍の長さを推定（極端な値は除外し平滑化）
-  if (lastHitTime !== null && lastHitBeats) {
-    const beatMs = (now - lastHitTime) / lastHitBeats;
-    if (beatMs >= MIN_BEAT_MS && beatMs <= MAX_BEAT_MS) {
-      estimatedBeatMs = estimatedBeatMs * 0.6 + beatMs * 0.4;
-    }
-  }
+  updateTempoEstimate(now);
   lastHitTime = now;
   lastHitBeats = target.beats || 1;
 
-  cancelPendingOffbeats();
-
   // 低音（C4未満）が鳴る拍でペダルを踏み替え、前の和音の響きを自然に消してから新しい和音を伸ばす
   const chord = Array.isArray(target.autoChord) ? target.autoChord : target.autoLeftNote ? [target.autoLeftNote] : [];
-  if (chord.some(isBassNote)) {
+  const hasBass = chord.some(isBassNote);
+  flushPendingOffbeats(hasBass);
+  if (hasBass) {
     pedalChange();
   }
   chord.forEach((n) => playTapSound(n, false, ACCOMP_VELOCITY, "pedal"));
 
   if (Array.isArray(target.autoOffbeat)) {
     target.autoOffbeat.forEach(({ beat, notes }) => {
-      const id = setTimeout(() => {
+      const entry = { id: null, notes };
+      entry.id = setTimeout(() => {
+        pendingOffbeats = pendingOffbeats.filter((p) => p !== entry);
         notes.forEach((n) => playTapSound(n, false, ACCOMP_VELOCITY, "pedal"));
       }, beat * estimatedBeatMs);
-      pendingOffbeatTimers.push(id);
+      pendingOffbeats.push(entry);
     });
   }
 }
 
-// 3秒カウントダウン状態管理
+// カウントイン（曲のテンポに合わせた 3・2・1・START!）状態管理
 export let isCountingDown = false;
 let countdownTimerId = null;
 
 /**
- * 3秒カウントダウンの実行（3 → 2 → 1 → START!）
- * @param {Function} callback カウントダウン完了後のコールバック
+ * カウントインのクリック音（メトロノーム風の短い音）
+ * @param {boolean} accent 1拍目（強拍）なら高めの音
+ */
+function playCountClick(accent) {
+  try {
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(accent ? 1760 : 1320, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(accent ? 0.5 : 0.32, now + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.08);
+  } catch (e) {
+    console.warn("[AUDIO] クリック音エラー:", e);
+  }
+}
+
+/**
+ * カウントインの実行（3 → 2 → 1 → START! を曲のテンポで1拍ずつ、クリック音つき）
+ * START! の拍から打鍵を受け付け、その次の拍で1音目を弾くと伴奏のテンポとそろう
+ * @param {Function} callback カウントイン完了後のコールバック
  */
 export function startCountdown(callback) {
   if (countdownTimerId) {
-    clearInterval(countdownTimerId);
+    clearTimeout(countdownTimerId);
     countdownTimerId = null;
   }
   isCountingDown = true;
@@ -889,37 +957,33 @@ export function startCountdown(callback) {
     return;
   }
 
+  // 伴奏のテンポもカウントインと同じ速さから始める
+  resetAccompaniment();
+  const beatMs = getSongBeatMs();
+  const labels = ["3", "2", "1", "START!"];
   overlay.classList.remove("hidden");
-  let count = 3;
-  textEl.textContent = `${count}`;
-  textEl.style.transform = "scale(1.2)";
-  setTimeout(() => {
-    if (textEl) textEl.style.transform = "scale(1.0)";
-  }, 60);
 
-  countdownTimerId = setInterval(() => {
-    count--;
-    if (count > 0) {
-      textEl.textContent = `${count}`;
-      textEl.style.transform = "scale(1.2)";
+  const tick = (i) => {
+    if (i < labels.length) {
+      textEl.textContent = labels[i];
+      textEl.style.transform = i === labels.length - 1 ? "scale(1.3)" : "scale(1.2)";
       setTimeout(() => {
         if (textEl) textEl.style.transform = "scale(1.0)";
       }, 60);
-    } else if (count === 0) {
-      textEl.textContent = "START!";
-      textEl.style.transform = "scale(1.3)";
-      setTimeout(() => {
-        if (textEl) textEl.style.transform = "scale(1.0)";
-      }, 60);
+      playCountClick(i === 0);
+      if (i === labels.length - 1) {
+        // START! の時点で打鍵を受け付け開始（次の拍で弾き始められるように）
+        isCountingDown = false;
+        updateStateHud("IDLE", false);
+      }
+      countdownTimerId = setTimeout(() => tick(i + 1), beatMs);
     } else {
-      clearInterval(countdownTimerId);
       countdownTimerId = null;
       overlay.classList.add("hidden");
-      isCountingDown = false;
-      updateStateHud("IDLE", false);
       if (callback) callback();
     }
-  }, 1000);
+  };
+  tick(0);
 }
 
 // 完走クリア演出の状態管理（クリア演出中は打鍵認識を一時停止）
