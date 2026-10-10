@@ -12,9 +12,6 @@ import * as Tone from "tone";
 // DOM要素
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("output-canvas");
-const stylizedCanvas = document.getElementById("stylized-view");
-const stylizedCtx = stylizedCanvas ? stylizedCanvas.getContext("2d", { willReadFrequently: true }) : null;
-const viewModeBtn = document.getElementById("view-mode-btn");
 const trackingLinesBtn = document.getElementById("tracking-lines-btn");
 const canvasCtx = canvas.getContext("2d");
 const statusText = document.getElementById("status-text");
@@ -2313,9 +2310,6 @@ function processVideoFrame(frameTime) {
     inferenceTime.textContent = `${calcDuration.toFixed(1)} ms`;
   }
 
-  // 映像のデフォルメ表示（ドット絵・シルエット）
-  renderStylizedView();
-
   // 生ランドマーク座標の直接描画
   drawRawHandLandmarks(results);
 
@@ -2324,26 +2318,8 @@ function processVideoFrame(frameTime) {
 }
 
 // ==========================================
-// 映像のデフォルメ表示（自分の顔がそのまま映らないようにする）
+// 演奏画面の表示設定
 // ==========================================
-// 既定は「そのまま」（ドット絵は毎フレーム全マスの色を書き換えるため負荷が高く、必要な人だけが選ぶ）
-const VIEW_MODES = [
-  { id: "raw", label: "そのまま" },
-  { id: "pixel", label: "ドット絵" },
-  { id: "silhouette", label: "シルエット" }
-];
-const PIXEL_VIEW_WIDTH = 144;      // ドット絵の横のマス数（小さいほど粗くなる）
-const SILHOUETTE_VIEW_WIDTH = 160; // シルエットは縮小してからぼかすので少し細かめ
-const PIXEL_COLOR_LEVELS = 5;      // ドット絵の色数（各色チャンネルの段階数）
-
-let viewMode = "raw";
-try {
-  const saved = localStorage.getItem("piarno.viewMode");
-  if (VIEW_MODES.some((m) => m.id === saved)) viewMode = saved;
-} catch (e) {
-  // 保存領域が使えない環境では既定の「そのまま」表示
-}
-
 // トラッキングライン（対象指の骨格ライン・関節点）の表示。既定は非表示で描画負荷を下げる
 let showTrackingLines = false;
 try {
@@ -2373,57 +2349,6 @@ if (trackingLinesBtn) {
   });
 }
 applyTrackingLinesButton();
-
-function applyViewMode() {
-  const container = video.parentElement;
-  if (container) container.dataset.view = viewMode;
-  const mode = VIEW_MODES.find((m) => m.id === viewMode);
-  if (viewModeBtn && mode) viewModeBtn.textContent = mode.label;
-}
-
-if (viewModeBtn) {
-  viewModeBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const index = VIEW_MODES.findIndex((m) => m.id === viewMode);
-    viewMode = VIEW_MODES[(index + 1) % VIEW_MODES.length].id;
-    try {
-      localStorage.setItem("piarno.viewMode", viewMode);
-    } catch (err) {
-      // 保存できなくても切り替え自体は有効
-    }
-    applyViewMode();
-    renderStylizedView();
-  });
-}
-applyViewMode();
-
-/**
- * 映像を低解像度に縮小して描き、CSSで拡大表示することでドット絵・シルエットにする
- * ドット絵は色数も減らしてポスター調にする
- */
-function renderStylizedView() {
-  if (!stylizedCtx || viewMode === "raw" || !video.videoWidth || !video.videoHeight) return;
-
-  const w = viewMode === "pixel" ? PIXEL_VIEW_WIDTH : SILHOUETTE_VIEW_WIDTH;
-  const h = Math.max(1, Math.round((w * video.videoHeight) / video.videoWidth));
-  if (stylizedCanvas.width !== w || stylizedCanvas.height !== h) {
-    stylizedCanvas.width = w;
-    stylizedCanvas.height = h;
-  }
-  stylizedCtx.drawImage(video, 0, 0, w, h);
-
-  if (viewMode === "pixel") {
-    const img = stylizedCtx.getImageData(0, 0, w, h);
-    const d = img.data;
-    const step = 255 / (PIXEL_COLOR_LEVELS - 1);
-    for (let i = 0; i < d.length; i += 4) {
-      d[i] = Math.round(d[i] / step) * step;
-      d[i + 1] = Math.round(d[i + 1] / step) * step;
-      d[i + 2] = Math.round(d[i + 2] / step) * step;
-    }
-    stylizedCtx.putImageData(img, 0, 0);
-  }
-}
 
 /**
  * requestVideoFrameCallback または requestAnimationFrame による推論ループ

@@ -23,15 +23,12 @@
       <!-- メイン映像コンテナ（ビデオとCanvasを自然比率で完全重畳） -->
       <div class="video-container">
         <video id="webcam" playsinline autoplay muted></video>
-        <!-- デフォルメ表示（ドット絵・シルエット）。認識には元の映像を使い、表示だけを置き換える -->
-        <canvas id="stylized-view" class="stylized-view"></canvas>
         <canvas id="output-canvas"></canvas>
       </div>
 
       <!-- 画面右上：楽曲選択丸ボタン＆ポップアップメニュー -->
       <div class="song-select-container">
         <button id="tracking-lines-btn" class="view-mode-btn" aria-label="トラッキングラインの表示を切り替え" aria-pressed="false" title="トラッキングラインの表示を切り替え">ライン OFF</button>
-        <button id="view-mode-btn" class="view-mode-btn" aria-label="映像の見え方を切り替え" title="映像の見え方を切り替え">そのまま</button>
         <button id="song-select-btn" class="song-select-btn" aria-label="楽曲選択" title="楽曲選択">♪</button>
         <div id="song-select-menu" class="song-select-menu hidden">
           <div class="song-menu-header">曲を選択</div>
