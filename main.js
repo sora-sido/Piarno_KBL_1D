@@ -15,6 +15,7 @@ const canvas = document.getElementById("output-canvas");
 const stylizedCanvas = document.getElementById("stylized-view");
 const stylizedCtx = stylizedCanvas ? stylizedCanvas.getContext("2d", { willReadFrequently: true }) : null;
 const viewModeBtn = document.getElementById("view-mode-btn");
+const trackingLinesBtn = document.getElementById("tracking-lines-btn");
 const canvasCtx = canvas.getContext("2d");
 const statusText = document.getElementById("status-text");
 const fpsCounter = document.getElementById("fps-counter");
@@ -2325,22 +2326,53 @@ function processVideoFrame(frameTime) {
 // ==========================================
 // 映像のデフォルメ表示（自分の顔がそのまま映らないようにする）
 // ==========================================
+// 既定は「そのまま」（ドット絵は毎フレーム全マスの色を書き換えるため負荷が高く、必要な人だけが選ぶ）
 const VIEW_MODES = [
+  { id: "raw", label: "そのまま" },
   { id: "pixel", label: "ドット絵" },
-  { id: "silhouette", label: "シルエット" },
-  { id: "raw", label: "そのまま" }
+  { id: "silhouette", label: "シルエット" }
 ];
 const PIXEL_VIEW_WIDTH = 144;      // ドット絵の横のマス数（小さいほど粗くなる）
 const SILHOUETTE_VIEW_WIDTH = 160; // シルエットは縮小してからぼかすので少し細かめ
 const PIXEL_COLOR_LEVELS = 5;      // ドット絵の色数（各色チャンネルの段階数）
 
-let viewMode = "pixel";
+let viewMode = "raw";
 try {
   const saved = localStorage.getItem("piarno.viewMode");
   if (VIEW_MODES.some((m) => m.id === saved)) viewMode = saved;
 } catch (e) {
-  // 保存領域が使えない環境では既定のドット絵表示のまま
+  // 保存領域が使えない環境では既定の「そのまま」表示
 }
+
+// トラッキングライン（対象指の骨格ライン・関節点）の表示。既定は非表示で描画負荷を下げる
+let showTrackingLines = false;
+try {
+  showTrackingLines = localStorage.getItem("piarno.showTrackingLines") === "1";
+} catch (e) {
+  // 保存領域が使えない環境では既定の非表示のまま
+}
+
+function applyTrackingLinesButton() {
+  if (trackingLinesBtn) {
+    trackingLinesBtn.textContent = showTrackingLines ? "ライン ON" : "ライン OFF";
+    trackingLinesBtn.classList.toggle("is-on", showTrackingLines);
+    trackingLinesBtn.setAttribute("aria-pressed", showTrackingLines ? "true" : "false");
+  }
+}
+
+if (trackingLinesBtn) {
+  trackingLinesBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    showTrackingLines = !showTrackingLines;
+    try {
+      localStorage.setItem("piarno.showTrackingLines", showTrackingLines ? "1" : "0");
+    } catch (err) {
+      // 保存できなくても切り替え自体は有効
+    }
+    applyTrackingLinesButton();
+  });
+}
+applyTrackingLinesButton();
 
 function applyViewMode() {
   const container = video.parentElement;
@@ -2741,58 +2773,60 @@ function drawRawHandLandmarks(results) {
   // 4. デバッグHUDのリアルタイム表示更新（平滑化座標と相対変位）
   updateDebugMetrics(smoothTip.x, smoothTip.y, currentRy);
 
-  // 5. 指定された指の骨格描画（shadowBlurを撤去し、多層ストロークで高速・高鮮明に描画）
+  // 5. 指定された指の骨格描画（トラッキングライン表示がONのときだけ。既定はOFFで描画負荷を削減）
   canvasCtx.save();
   canvasCtx.lineCap = "round";
   canvasCtx.lineJoin = "round";
 
-  // 共通骨格パス生成
-  const drawBonePath = () => {
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(smoothP1.x, smoothP1.y);
-    canvasCtx.lineTo(smoothP2.x, smoothP2.y);
-    canvasCtx.lineTo(smoothP3.x, smoothP3.y);
-    canvasCtx.lineTo(smoothTip.x, smoothTip.y);
-  };
+  if (showTrackingLines) {
+    // 共通骨格パス生成
+    const drawBonePath = () => {
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(smoothP1.x, smoothP1.y);
+      canvasCtx.lineTo(smoothP2.x, smoothP2.y);
+      canvasCtx.lineTo(smoothP3.x, smoothP3.y);
+      canvasCtx.lineTo(smoothTip.x, smoothTip.y);
+    };
 
-  // 層1: 外側発光ハローライン（太さ 12px、半透明カラーでブラー相当のグロー感を表現）
-  canvasCtx.strokeStyle = targetColor.halo || "rgba(200, 54, 80, 0.25)";
-  canvasCtx.lineWidth = 12.0;
-  drawBonePath();
-  canvasCtx.stroke();
+    // 層1: 外側発光ハローライン（太さ 12px、半透明カラーでブラー相当のグロー感を表現）
+    canvasCtx.strokeStyle = targetColor.halo || "rgba(200, 54, 80, 0.25)";
+    canvasCtx.lineWidth = 12.0;
+    drawBonePath();
+    canvasCtx.stroke();
 
-  // 層2: 中間メインネオンライン（太さ 6.0px、高彩度ネオンカラー）
-  canvasCtx.strokeStyle = targetColor.stroke;
-  canvasCtx.lineWidth = 6.0;
-  drawBonePath();
-  canvasCtx.stroke();
+    // 層2: 中間メインネオンライン（太さ 6.0px、高彩度ネオンカラー）
+    canvasCtx.strokeStyle = targetColor.stroke;
+    canvasCtx.lineWidth = 6.0;
+    drawBonePath();
+    canvasCtx.stroke();
 
-  // 層3: 内側高輝度ホワイトコアライン（太さ 2.4px：芯が白く発光して立体感・視認性を極大化）
-  canvasCtx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-  canvasCtx.lineWidth = 2.4;
-  drawBonePath();
-  canvasCtx.stroke();
+    // 層3: 内側高輝度ホワイトコアライン（太さ 2.4px：芯が白く発光して立体感・視認性を極大化）
+    canvasCtx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    canvasCtx.lineWidth = 2.4;
+    drawBonePath();
+    canvasCtx.stroke();
 
-  // 対象指関節点（P1, P2, P3）の多層描画（外側ハロー＋メイン＋白コア）
-  [smoothP1, smoothP2, smoothP3].forEach((pt) => {
-    // 層1: 外側ハロー
-    canvasCtx.beginPath();
-    canvasCtx.arc(pt.x, pt.y, 8.0, 0, 2 * Math.PI);
-    canvasCtx.fillStyle = targetColor.halo || "rgba(200, 54, 80, 0.25)";
-    canvasCtx.fill();
+    // 対象指関節点（P1, P2, P3）の多層描画（外側ハロー＋メイン＋白コア）
+    [smoothP1, smoothP2, smoothP3].forEach((pt) => {
+      // 層1: 外側ハロー
+      canvasCtx.beginPath();
+      canvasCtx.arc(pt.x, pt.y, 8.0, 0, 2 * Math.PI);
+      canvasCtx.fillStyle = targetColor.halo || "rgba(200, 54, 80, 0.25)";
+      canvasCtx.fill();
 
-    // 層2: メインカラードット
-    canvasCtx.beginPath();
-    canvasCtx.arc(pt.x, pt.y, 5.0, 0, 2 * Math.PI);
-    canvasCtx.fillStyle = targetColor.fill;
-    canvasCtx.fill();
+      // 層2: メインカラードット
+      canvasCtx.beginPath();
+      canvasCtx.arc(pt.x, pt.y, 5.0, 0, 2 * Math.PI);
+      canvasCtx.fillStyle = targetColor.fill;
+      canvasCtx.fill();
 
-    // 層3: 内側白熱コア
-    canvasCtx.beginPath();
-    canvasCtx.arc(pt.x, pt.y, 2.4, 0, 2 * Math.PI);
-    canvasCtx.fillStyle = "#ffffff";
-    canvasCtx.fill();
-  });
+      // 層3: 内側白熱コア
+      canvasCtx.beginPath();
+      canvasCtx.arc(pt.x, pt.y, 2.4, 0, 2 * Math.PI);
+      canvasCtx.fillStyle = "#ffffff";
+      canvasCtx.fill();
+    });
+  }
 
   // 6. 対象指先端（TIP）のハイライトターゲット描画（多層発光リング＋白熱コア）
   drawTipTargetMark(smoothTip.x, smoothTip.y, targetColor);

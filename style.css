@@ -261,6 +261,11 @@ html, body {
   transform: scale(0.95);
 }
 
+.view-mode-btn.is-on {
+  border-color: var(--wine-bright);
+  box-shadow: 0 0 10px var(--wine-glow);
+}
+
 /* 右上の丸いボタン（直径38px・白黒シンプル） */
 .song-select-btn {
   width: 38px;
