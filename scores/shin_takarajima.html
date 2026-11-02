@@ -111,17 +111,52 @@ const visual = ABCJS.renderAbc("score", abc, {
 });
 
 // 再生ボタン（リズム確認用）
-let synth = null, playing = false;
+// 外部の音源ファイルを使わず、Web Audio のオシレーターで直接鳴らす（オフラインでも再生可）
+const BPM = 117;
+const SEC_PER_WHOLE = (60 / BPM) * 4;
+let ctx = null, voices = [], endTimer = null;
 const btn = document.getElementById("play");
+
+function collectNotes() {
+  // abcjs の音声データ（start/duration は全音符単位、pitch は MIDI 番号）
+  const audio = visual[0].setUpAudio({ qpm: BPM });
+  const notes = [];
+  audio.tracks.forEach(t => t.forEach(ev => { if (ev.cmd === "note") notes.push(ev); }));
+  return notes;
+}
+
+function stop() {
+  voices.forEach(o => { try { o.stop(); } catch (e) {} });
+  voices = [];
+  clearTimeout(endTimer);
+  btn.textContent = "▶ 再生";
+}
+
 btn.addEventListener("click", async () => {
-  if (playing) { synth.stop(); playing = false; btn.textContent = "▶ 再生"; return; }
-  if (!ABCJS.synth.supportsAudio()) { btn.textContent = "再生非対応"; return; }
-  btn.textContent = "読み込み中…";
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  synth = new ABCJS.synth.CreateSynth();
-  await synth.init({ visualObj: visual[0], audioContext: ctx, millisecondsPerMeasure: visual[0].millisecondsPerMeasure() });
-  await synth.prime();
-  synth.start(); playing = true; btn.textContent = "■ 停止";
+  if (voices.length) { stop(); return; }
+  ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+  await ctx.resume();
+  const t0 = ctx.currentTime + 0.1;
+  let end = 0;
+  collectNotes().forEach(n => {
+    const start = t0 + n.start * SEC_PER_WHOLE;
+    const dur = Math.max(0.08, n.duration * SEC_PER_WHOLE * 0.95);
+    const freq = 440 * Math.pow(2, (n.pitch - 69) / 12);
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.3, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.12, start + Math.min(0.3, dur));
+    gain.gain.setValueAtTime(0.12, start + dur - 0.03);
+    gain.gain.linearRampToValueAtTime(0, start + dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start); osc.stop(start + dur + 0.02);
+    voices.push(osc);
+    end = Math.max(end, start + dur);
+  });
+  btn.textContent = "■ 停止";
+  endTimer = setTimeout(stop, (end - ctx.currentTime) * 1000 + 200);
 });
 </script>
 </body>
