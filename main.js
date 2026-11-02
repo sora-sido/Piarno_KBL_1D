@@ -8,6 +8,7 @@
 
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
+import { setupRecordButton, onPlayStart, onHit as onRecordHit, recordFrame, isRecording } from "./recorder.js";
 
 // 打鍵→発音の遅延対策：Tone.js は時刻未指定の発音を既定で lookAhead（0.1秒）後に予約するため、
 // 0 にして打鍵判定と同じ瞬間に鳴らす（リアルタイム演奏用。シーケンス再生はしないので先読みは不要）
@@ -836,6 +837,7 @@ export function startCountdown(callback) {
   const textEl = document.getElementById("countdown-text");
   if (!overlay || !textEl) {
     isCountingDown = false;
+    onPlayStart(buildRecordMeta());
     if (callback) callback();
     return;
   }
@@ -868,6 +870,7 @@ export function startCountdown(callback) {
       overlay.classList.add("hidden");
       isCountingDown = false;
       updateStateHud("IDLE", false);
+      onPlayStart(buildRecordMeta());
       if (callback) callback();
     }
   }, 1000);
@@ -876,6 +879,54 @@ export function startCountdown(callback) {
 // 完走クリア演出の状態管理（クリア演出中は打鍵認識を一時停止）
 export let isClearing = false;
 let clearTimerId = null;
+
+/**
+ * 演奏記録（recorder.js）に渡す曲と判定基準の情報
+ * 新宝島は前奏（phrase 1 = 第1〜20音）を弾き終えたら記録を止める。ほかの曲は最後まで
+ */
+function buildRecordMeta() {
+  const song = SONGS[currentSongId];
+  const seq = currentSequence;
+  let stopAfterStep = seq.length - 1;
+  let rangeLabel = "全曲";
+  if (currentSongId === "shin_takarajima") {
+    const introLen = seq.filter((n) => n.phrase === 1).length;
+    stopAfterStep = introLen - 1;
+    rangeLabel = `前奏（第1〜${introLen}音）`;
+  }
+  const thresholds = {};
+  Object.keys(FINGER_CONFIGS).forEach((k) => {
+    const m = fingerThresholdModels[k] || { hitRy: 0.6, liftRy: 0.57 };
+    thresholds[k] = { hitRy: m.hitRy, liftRy: m.liftRy };
+  });
+  return {
+    songId: currentSongId,
+    songTitle: song ? song.title : "",
+    sequence: seq,
+    stopAfterStep,
+    rangeLabel,
+    thresholds,
+    vth: { ...FINGER_VY_THRESHOLDS },
+    rise: { ...FINGER_RISE_TO_REARM }
+  };
+}
+
+/**
+ * 記録用：5本の指それぞれの下がり具合（ry）と下向きの速さ（vy）を、演奏中の判定と同じ式で計算
+ */
+function computeAllFingerFeatures(width, height) {
+  const ry = {};
+  const vy = {};
+  const wrist = smoothedLandmarksPool[0];
+  Object.entries(FINGER_CONFIGS).forEach(([key, cfg]) => {
+    const base = smoothedLandmarksPool[cfg.baseIdx];
+    const tip = smoothedLandmarksPool[cfg.tipIdx];
+    const dist = Math.max(Math.hypot(base.x - wrist.x, base.y - wrist.y), height * 0.05);
+    ry[key] = (tip.y - base.y) / dist;
+    vy[key] = landmarkFilters[cfg.tipIdx].getVelocityY() / dist;
+  });
+  return { ry, vy };
+}
 
 /**
  * 完走時の白黒ミニマルクリア通知のフェード表示（約1.5秒間）
@@ -2677,6 +2728,9 @@ function drawRawHandLandmarks(results) {
       lastTrackedWrist = null; // ★完全ロスト時は右手トラッキング位置もリセット
       lastFilteredFingerKey = null; // ★完全ロスト時は平滑化対象指もリセット
       resetDebugMetrics();
+      if (isRecording()) {
+        recordFrame(video, { lost: true, step: currentSongStep, target: currentFingerKey, state: tapState, hit: false });
+      }
       return;
     }
   } else {
@@ -2758,11 +2812,19 @@ function drawRawHandLandmarks(results) {
 
   // 3. レベル2打鍵認識（変位 ＋ 平滑化下降速度ゲートにより机面静止待機誤爆を完全遮断）
   // カウントダウン中（3・2・1）、完走クリア演出中、および画面外復帰初フレームは打鍵認識を安全にスキップ
+  // 記録用：このコマの判定前の状態・弾くべき音
+  const frameStep = currentSongStep;
+  const frameTarget = currentFingerKey;
+  const frameState = tapState;
+  let frameHit = false;
+
   if (tapState === "IDLE" && !isCountingDown && !isClearing && !isReacquired) {
     // 平滑化変位が打鍵閾値以上 かつ 下降速度が速度閾値以上（勢いよく振り下ろされた瞬間）
     if (currentRy >= hitRyThreshold && tipVy >= hitVyThreshold && now - lastHitTime >= MIN_TAP_INTERVAL_MS) {
       tapState = "TOUCHED";
       lastHitTime = now;
+      frameHit = true;
+      onRecordHit(currentSongStep);
       touchedLowestRy = currentRy;
       touchedFingerKey = currentFingerKey;
 
@@ -2847,6 +2909,22 @@ function drawRawHandLandmarks(results) {
   }
 
   // 4. デバッグHUDのリアルタイム表示更新（平滑化座標、相対変位、下降速度）
+  if (isRecording()) {
+    const feats = computeAllFingerFeatures(width, height);
+    recordFrame(video, {
+      lost: false,
+      step: frameStep,
+      target: frameTarget,
+      state: frameState,
+      hit: frameHit,
+      ry: feats.ry,
+      vy: feats.vy,
+      pts: smoothedLandmarksPool.map((p) => [Math.round(p.x), Math.round(p.y)]),
+      w: width,
+      h: height
+    });
+  }
+
   updateDebugMetrics(smoothTip.x, smoothTip.y, currentRy, tipVy);
 
   // 5. 指定された指の骨格描画（表示フラグ showTrackingLines がONの時のみ描画）
@@ -3294,6 +3372,15 @@ if (csvFileInput) {
 }
 
 // 画面右上の丸い楽曲選択ボタンとメニュー
+// 右上：演奏の記録ボタン（● → カウントダウン後の演奏を記録し、終了後に振り返り画面を表示）
+const topRightControls = document.querySelector(".top-right-controls");
+if (topRightControls) {
+  setupRecordButton(topRightControls, () => {
+    // カメラ起動済みなら、今の曲を最初からカウントダウン付きで始め直す（起動前ならスタート時に記録開始）
+    if (isPredicting) selectSong(currentSongId, true);
+  });
+}
+
 const songSelectBtn = document.getElementById("song-select-btn");
 const songSelectMenu = document.getElementById("song-select-menu");
 
