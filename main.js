@@ -9,6 +9,10 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
 
+// 打鍵→発音の遅延対策：Tone.js は時刻未指定の発音を既定で lookAhead（0.1秒）後に予約するため、
+// 0 にして打鍵判定と同じ瞬間に鳴らす（リアルタイム演奏用。シーケンス再生はしないので先読みは不要）
+Tone.getContext().lookAhead = 0;
+
 // DOM要素
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("output-canvas");
@@ -418,9 +422,9 @@ class OneEuroFilter {
  * 2D関節座標用 1 Euro Filter
  */
 class PointFilter {
-  constructor(minCutoff = 1.2, beta = 0.008) {
-    this.xf = new OneEuroFilter(minCutoff, beta);
-    this.yf = new OneEuroFilter(minCutoff, beta);
+  constructor(minCutoff = 1.2, beta = 0.008, dCutoff = 1.0) {
+    this.xf = new OneEuroFilter(minCutoff, beta, dCutoff);
+    this.yf = new OneEuroFilter(minCutoff, beta, dCutoff);
   }
 
   reset(x = null, y = null, timestamp = null) {
@@ -960,7 +964,10 @@ export function selectSong(songId, withCountdown = true) {
 
 // 手の全21ランドマーク専用の適応平滑化フィルター（1 Euro Filter）
 // 手首（0）から親指・人差し指・中指・薬指・小指（20）まで全関節を独立して常時平滑化
-const landmarkFilters = Array.from({ length: 21 }, () => new PointFilter(1.2, 0.008));
+// 速度（打鍵判定の下降速度ゲートに使用）の平滑化カットオフは 4Hz。
+// 1Hz だと時定数約160msで、50〜100msの打鍵動作の速度が実際の半分以下にしか現れず軽いタッチを取りこぼしていた
+const VELOCITY_CUTOFF_HZ = 4.0;
+const landmarkFilters = Array.from({ length: 21 }, () => new PointFilter(1.2, 0.008, VELOCITY_CUTOFF_HZ));
 
 // 全21関節点用の平滑化座標オブジェクトプール（毎フレームの新規オブジェクト生成・破棄によるGCスパイクを完全排除）
 const smoothedLandmarksPool = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
@@ -975,6 +982,7 @@ let lastRawLandmarks = null;
 let lastTrackedWrist = null;
 // 平滑化対象指の切り替え検知用（指変更時にスナップ初期化）
 let lastFilteredFingerKey = null;
+const ALL_JOINT_INDICES = Array.from({ length: 21 }, (_, i) => i);
 
 // 手の骨格コネクション定義（全21ランドマーク間の接続ペア [startIdx, endIdx]）
 const HAND_CONNECTIONS = [
@@ -1014,15 +1022,19 @@ export function updateCachedConnections(fingerKey) {
   currentOtherConnections = connections;
 }
 
-// 指ごとの推奨平滑化下降速度閾値（ピクセル/秒）
-// 打鍵時は急峻な下降（300〜1600 px/s）が発生し、静止待機時（0〜8 px/s）を完全に遮断
+// 指ごとの平滑化下降速度閾値（単位：手の大きさ/秒 ＝ 指先の下降速度 ÷ 手首〜指の付け根の距離）
+// 解像度・手とカメラの距離に依存しない。public/dataset の打鍵録画を再生したシミュレーションで、
+// 打鍵ピーク速度（中央値 約10、下位10% 約7）を拾いつつ静止・空中動作の誤検知が増えない値に設定
 export const FINGER_VY_THRESHOLDS = {
-  THUMB: 160,
-  INDEX: 220,
-  MIDDLE: 220,
-  RING: 180,
-  PINKY: 180
+  THUMB: 5.0,
+  INDEX: 6.0,
+  MIDDLE: 6.0,
+  RING: 6.0,
+  PINKY: 6.0
 };
+
+// 早期リフト復帰と判定する上向き速度（手の大きさ/秒）
+const LIFT_REBOUND_VY = 1.2;
 
 // 指ごとの学習閾値モデル
 // 速度ゲート（下降速度 vy）を併用するため、静止待機誤爆を心配せず変位閾値を浅く緩和して軽いタッチを確実に検知
@@ -1460,7 +1472,7 @@ export function applyFingerThreshold(fingerKey) {
     thVal.textContent = hitRyThreshold.toFixed(2);
   }
   if (vThVal) {
-    const vyTh = FINGER_VY_THRESHOLDS[fingerKey] || 200;
+    const vyTh = FINGER_VY_THRESHOLDS[fingerKey] || 6.0;
     vThVal.textContent = `${vyTh}`;
   }
 }
@@ -1997,7 +2009,8 @@ async function initHandLandmarker() {
 
   for (const modelPath of modelPaths) {
     try {
-      // 画面内に左手が存在していても右手を見落とさず確実に追従・ロックするため両手（最大2手）検出を有効化
+      // 検出は1手に限定（右手のみで演奏する前提）。numHands=2 だと片手しか映っていないとき
+      // MediaPipe が「もう1本の手」を探す手のひら検出を毎フレーム実行し、推論時間が増えてfpsが落ちるため
       // 水平ローアングルでの打鍵時（机面接触・影）の再検出ループを防ぐため追従閾値を適正化
       handLandmarker = await HandLandmarker.createFromOptions(vision, {
         baseOptions: {
@@ -2005,7 +2018,7 @@ async function initHandLandmarker() {
           delegate: "GPU"
         },
         runningMode: "VIDEO",
-        numHands: 2,
+        numHands: 1,
         minHandDetectionConfidence: 0.4,
         minHandPresenceConfidence: 0.4,
         minTrackingConfidence: 0.3
@@ -2021,7 +2034,7 @@ async function initHandLandmarker() {
             delegate: "CPU"
           },
           runningMode: "VIDEO",
-          numHands: 2,
+          numHands: 1,
           minHandDetectionConfidence: 0.4,
           minHandPresenceConfidence: 0.4,
           minTrackingConfidence: 0.3
@@ -2584,8 +2597,9 @@ function drawRawHandLandmarks(results) {
 
   const fingerConfig = FINGER_CONFIGS[currentFingerKey] || FINGER_CONFIGS.THUMB;
   const targetIndices = fingerConfig.indices;
-  // 演奏判定および骨格描画に必要な関節インデックス（手首 0 ＋ 選択中指の全関節 [p1, p2, p3, tip]）
-  const activeJointIndices = [0, fingerConfig.p1Idx, fingerConfig.p2Idx, fingerConfig.p3Idx, fingerConfig.tipIdx];
+  // 平滑化する関節インデックス：全21点を毎フレーム更新する
+  // （次に弾く指の速度・位置が常に最新に保たれ、指が切り替わった直後でも速度が0から立ち上げ直しにならない）
+  const activeJointIndices = ALL_JOINT_INDICES;
   const width = canvas.width;
   const height = canvas.height;
   const now = performance.now();
@@ -2640,13 +2654,12 @@ function drawRawHandLandmarks(results) {
   // 追従中の右手手首の生正規化座標で lastTrackedWrist を毎フレーム更新
   lastTrackedWrist = { x: landmarks[0].x, y: landmarks[0].y };
 
-  // 演奏・描画に必要な関節点のみ独立平滑化（全21点から5点に絞りフィルタ計算負荷を約76%削減）
+  // 全関節点を独立平滑化（指を切り替えても各指のフィルター状態・速度は連続して保持される）
   if (hasHands) {
-    const isFingerChanged = lastFilteredFingerKey !== currentFingerKey;
-    const needSnap = isReacquired || isFingerChanged;
+    const needSnap = isReacquired;
 
     if (needSnap) {
-      // 画面外復帰または指切り替え初フレーム：過去の古い座標からの引きずりをバイパスし、新座標で即座にスナップ初期化
+      // 画面外復帰の初フレーム：過去の古い座標からの引きずりをバイパスし、新座標で即座にスナップ初期化
       for (const i of activeJointIndices) {
         const raw = landmarks[i];
         landmarkFilters[i].snap(raw.x * width, raw.y * height, now, smoothedLandmarksPool[i]);
@@ -2692,10 +2705,11 @@ function drawRawHandLandmarks(results) {
   // 現在のターゲット音符とハイライト色（単発＝水色、連続＝黄色→緑色→青色）
   const targetColor = getTargetFingerColor(currentSongStep);
 
-  // 対象指先端の平滑化下降速度（ピクセル/秒）を取得（下向き > 0、上向き < 0）
+  // 対象指先端の平滑化下降速度を「手の大きさ（手首〜指の付け根の距離）/秒」に正規化（下向き > 0、上向き < 0）
+  // ピクセル/秒のままだと、カメラ解像度や手とカメラの距離で同じ動きでも値が変わり感度が端末ごとにぶれるため
   const tipFilter = landmarkFilters[fingerConfig.tipIdx];
-  const tipVy = tipFilter ? tipFilter.getVelocityY() : 0;
-  const hitVyThreshold = FINGER_VY_THRESHOLDS[currentFingerKey] || 200;
+  const tipVy = tipFilter ? tipFilter.getVelocityY() / safeBaseDistPx : 0;
+  const hitVyThreshold = FINGER_VY_THRESHOLDS[currentFingerKey] || 6.0;
 
   // 3. レベル2打鍵認識（変位 ＋ 平滑化下降速度ゲートにより机面静止待機誤爆を完全遮断）
   // カウントダウン中（3・2・1）、完走クリア演出中、および画面外復帰初フレームは打鍵認識を安全にスキップ
@@ -2735,7 +2749,7 @@ function drawRawHandLandmarks(results) {
       updateStateHud("TOUCHED", true);
 
       console.log(
-        `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}, vy=${tipVy.toFixed(0)} >= V_TH:${hitVyThreshold}${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
+        `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}, vy=${tipVy.toFixed(1)} >= V_TH:${hitVyThreshold}${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
       );
 
       const isLastStep = currentSongStep === currentSequence.length - 1;
@@ -2764,9 +2778,9 @@ function drawRawHandLandmarks(results) {
   } else if (tapState === "TOUCHED") {
     // 指のリフト復帰：
     // 1. 変位がリフト閾値を下回った場合（通常の位置復帰）
-    // 2. または、指先が上向きにリバウンド反転（tipVy <= -100 px/s）し、かつ打鍵変位からわずかに抜けた場合（早期リフト復帰）
+    // 2. または、指先が上向きにリバウンド反転（tipVy <= -1.2 手の大きさ/秒）し、かつ打鍵変位からわずかに抜けた場合（早期リフト復帰）
     const isLiftByPosition = currentRy <= liftRyThreshold;
-    const isLiftByRebound = tipVy <= -100 && currentRy <= (hitRyThreshold - 0.02);
+    const isLiftByRebound = tipVy <= -LIFT_REBOUND_VY && currentRy <= (hitRyThreshold - 0.02);
 
     if (isLiftByPosition || isLiftByRebound) {
       tapState = "IDLE";
@@ -2906,7 +2920,7 @@ function updateDebugMetrics(x, y, ry, vy = 0) {
     relYVal.textContent = ry !== undefined && ry !== null ? (ry >= 0 ? `+${ry.toFixed(2)}` : ry.toFixed(2)) : "-";
   }
   if (velYVal) {
-    velYVal.textContent = vy !== undefined && vy !== null ? (vy >= 0 ? `+${vy.toFixed(0)}` : vy.toFixed(0)) : "-";
+    velYVal.textContent = vy !== undefined && vy !== null ? (vy >= 0 ? `+${vy.toFixed(1)}` : vy.toFixed(1)) : "-";
   }
 }
 
