@@ -183,6 +183,10 @@ let trainedHitSamples = 0;
 
 // 打鍵ステートマシン管理（IDLE: 待機, TOUCHED: 机面接触中・リフト待ち）
 let tapState = "IDLE";
+// 押下中（TOUCHED）に記録する、対象指が最も下がった位置（ry の最大値）と、その対象指
+let touchedLowestRy = 0;
+let touchedFingerKey = null;
+let lastHitTime = -Infinity;
 
 // 画面自動消灯防止（Screen Wake Lock API）の管理用センチネル
 let wakeLockSentinel = null;
@@ -1034,7 +1038,22 @@ export const FINGER_VY_THRESHOLDS = {
 };
 
 // 早期リフト復帰と判定する上向き速度（手の大きさ/秒）
-const LIFT_REBOUND_VY = 1.2;
+const LIFT_REBOUND_VY = 1.5;
+
+// 打鍵後、最も下がった位置から指がこれだけ戻ったら次の打鍵を受け付ける（手の大きさ比）
+// 従来は ry が固定のリフト閾値を下回るまで待っていたが、手の構え・カメラ角度によっては
+// 指を上げても閾値まで戻らず「押しっぱなし」扱いのまま次の打鍵を取りこぼしていた
+// （打鍵録画の再生で、押しっぱなし扱いの時間が全体の約7割を占めていた）
+export const FINGER_RISE_TO_REARM = {
+  THUMB: 0.12, // 親指は縦の動きが中指の約3分の1と小さいため
+  INDEX: 0.3,
+  MIDDLE: 0.3,
+  RING: 0.3,
+  PINKY: 0.3
+};
+
+// 同じ打鍵の二重判定を防ぐ最短間隔（ミリ秒）。♩=156 の16分音符（約96ms）より短くしている
+const MIN_TAP_INTERVAL_MS = 80;
 
 // 指ごとの学習閾値モデル
 // 速度ゲート（下降速度 vy）を併用するため、静止待機誤爆を心配せず変位閾値を浅く緩和して軽いタッチを確実に検知
@@ -1516,6 +1535,16 @@ export function parseCsv(text, filename = "") {
   const mcpYIdx = headers.indexOf("index_mcp_y") !== -1 ? headers.indexOf("index_mcp_y") : headers.indexOf("mcp_y");
   const tipYIdx = headers.indexOf("index_tip_y") !== -1 ? headers.indexOf("index_tip_y") : headers.indexOf("tip_y");
 
+  // 指先・指の付け根・手首の生座標が記録されている場合は、演奏中の判定（drawRawHandLandmarks）と
+  // 同じ式で ry を計算し直す。CSV の ry 列は旧バージョンの式で記録されており、演奏中の ry と
+  // スケールが合わず（中指で約1.3倍のずれ）、学習した閾値が外れる原因になっていたため
+  const coordIdx = {
+    tipX: headers.indexOf("tip_x"), tipY: headers.indexOf("tip_y"),
+    mcpX: headers.indexOf("mcp_x"), mcpY: headers.indexOf("mcp_y"),
+    wristX: headers.indexOf("wrist_x"), wristY: headers.indexOf("wrist_y")
+  };
+  const hasCoords = Object.values(coordIdx).every((idx) => idx !== -1);
+
   const results = [];
   let manualHitCount = 0;
 
@@ -1537,7 +1566,17 @@ export function parseCsv(text, filename = "") {
       if (isHit) manualHitCount++;
     }
 
-    if (ryIdx !== -1 && cols[ryIdx] !== undefined && cols[ryIdx] !== "") {
+    let fromCoords = false;
+    if (hasCoords && cols[coordIdx.tipY] && cols[coordIdx.mcpY] && cols[coordIdx.wristY]) {
+      const [tx, ty, mx, my, wx, wy] = [
+        coordIdx.tipX, coordIdx.tipY, coordIdx.mcpX, coordIdx.mcpY, coordIdx.wristX, coordIdx.wristY
+      ].map((idx) => parseFloat(cols[idx]));
+      const handSize = Math.hypot(mx - wx, my - wy);
+      if ([tx, ty, mx, my, wx, wy].every((v) => !isNaN(v)) && handSize > 1) {
+        ry = (ty - my) / handSize;
+        fromCoords = true;
+      }
+    } else if (ryIdx !== -1 && cols[ryIdx] !== undefined && cols[ryIdx] !== "") {
       ry = parseFloat(cols[ryIdx]);
     } else if (mcpYIdx !== -1 && tipYIdx !== -1 && cols[mcpYIdx] && cols[tipYIdx]) {
       const my = parseFloat(cols[mcpYIdx]);
@@ -1551,7 +1590,8 @@ export function parseCsv(text, filename = "") {
       results.push({
         timestamp,
         ry,
-        isHit
+        isHit,
+        fromCoords
       });
     }
   }
@@ -1676,9 +1716,14 @@ function trainModelForFinger(fingerKey) {
       const hitRatio = fingerKey === "THUMB" ? 0.30 : (fingerKey === "RING" ? 0.46 : 0.45);
       hitTh = maxAirRy + (medianHitRy - maxAirRy) * hitRatio;
 
-      // 速度ゲートにより机面待機誤爆が防止されているため、浅い打鍵でも確実に反応するよう適正範囲内にクランプ
-      const minHitTh = fingerKey === "THUMB" ? 0.30 : (fingerKey === "PINKY" ? 0.45 : 0.50);
-      hitTh = Math.max(hitTh, minHitTh);
+      // 旧式の ry 列から学習した場合のみ、従来どおり下限でクランプする。
+      // 座標から演奏中と同じ式で ry を計算した場合は、データから出た値をそのまま使う
+      // （親指は動きが小さく、下限 0.30 でクランプすると打鍵がほとんど届かなくなるため）
+      const allFromCoords = frames.every((f) => f.fromCoords);
+      if (!allFromCoords) {
+        const minHitTh = fingerKey === "THUMB" ? 0.30 : (fingerKey === "PINKY" ? 0.45 : 0.50);
+        hitTh = Math.max(hitTh, minHitTh);
+      }
 
       // リフト閾値：全指で打鍵位置からわずかに指を浮かせるだけで素早くIDLE復帰できるよう、
       // ヒステリシス幅を極小（0.03）に設定
@@ -2715,8 +2760,11 @@ function drawRawHandLandmarks(results) {
   // カウントダウン中（3・2・1）、完走クリア演出中、および画面外復帰初フレームは打鍵認識を安全にスキップ
   if (tapState === "IDLE" && !isCountingDown && !isClearing && !isReacquired) {
     // 平滑化変位が打鍵閾値以上 かつ 下降速度が速度閾値以上（勢いよく振り下ろされた瞬間）
-    if (currentRy >= hitRyThreshold && tipVy >= hitVyThreshold) {
+    if (currentRy >= hitRyThreshold && tipVy >= hitVyThreshold && now - lastHitTime >= MIN_TAP_INTERVAL_MS) {
       tapState = "TOUCHED";
+      lastHitTime = now;
+      touchedLowestRy = currentRy;
+      touchedFingerKey = currentFingerKey;
 
       // 該当指先でノーツHIT弾けエフェクトを発火
       triggerNoteHitEffect(currentSongStep);
@@ -2776,13 +2824,23 @@ function drawRawHandLandmarks(results) {
       }
     }
   } else if (tapState === "TOUCHED") {
-    // 指のリフト復帰：
-    // 1. 変位がリフト閾値を下回った場合（通常の位置復帰）
-    // 2. または、指先が上向きにリバウンド反転（tipVy <= -1.2 手の大きさ/秒）し、かつ打鍵変位からわずかに抜けた場合（早期リフト復帰）
-    const isLiftByPosition = currentRy <= liftRyThreshold;
-    const isLiftByRebound = tipVy <= -LIFT_REBOUND_VY && currentRy <= (hitRyThreshold - 0.02);
+    // 打鍵で対象指が次の指に切り替わった場合は、新しい指の現在位置から最下点の記録を始める
+    if (touchedFingerKey !== currentFingerKey) {
+      touchedFingerKey = currentFingerKey;
+      touchedLowestRy = currentRy;
+    }
+    touchedLowestRy = Math.max(touchedLowestRy, currentRy);
 
-    if (isLiftByPosition || isLiftByRebound) {
+    // 指のリフト復帰（どれか1つで次の打鍵を受け付ける）：
+    // 1. 変位がリフト閾値を下回った（通常の位置復帰）
+    // 2. 最も下がった位置から指が一定量戻った（構えやカメラ角度に左右されない相対的な復帰）
+    // 3. 指先が上向きに動いた（上向き速度 >= 1.5 手の大きさ/秒）
+    const isLiftByPosition = currentRy <= liftRyThreshold;
+    const riseToRearm = FINGER_RISE_TO_REARM[currentFingerKey] || 0.3;
+    const isLiftByRise = touchedLowestRy - currentRy >= riseToRearm;
+    const isLiftByRebound = tipVy <= -LIFT_REBOUND_VY;
+
+    if (isLiftByPosition || isLiftByRise || isLiftByRebound) {
       tapState = "IDLE";
       updateStateHud("IDLE", false);
     }
