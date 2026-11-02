@@ -102,6 +102,8 @@ const FREQ_TO_NOTE_MAP = {
   329.63: "E4",
   349.23: "F4",
   392.00: "G4",
+  440.00: "A4",
+  466.16: "Bb4",
   // （互換用高音域 C5〜G5）
   523.25: "C5",
   587.33: "D5",
@@ -699,6 +701,83 @@ export const MARY_HAD_A_LITTLE_LAMB_SEQUENCE = [
   { step: 26, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: "C3" }
 ];
 
+// 『新宝島』運指・音名シーケンス定義（右手のみ・調号♭2つ＝シはすべてシ♭）
+// scores/shin_takarajima.html の楽譜と同じモチーフ構成。タイでつながる音は1打鍵として扱う
+// 書式: "音名:指番号"（1:親指, 2:人差し指, 3:中指, 4:薬指, 5:小指）
+const SHIN_TAKARAJIMA_NOTES = {
+  F4:  { note: "ファ", freq: 349.23 },
+  G4:  { note: "ソ",   freq: 392.00 },
+  A4:  { note: "ラ",   freq: 440.00 },
+  Bb4: { note: "シ♭", freq: 466.16 },
+  C5:  { note: "ド",   freq: 523.25 },
+  D5:  { note: "レ",   freq: 587.33 },
+  F5:  { note: "ファ", freq: 698.46 },
+  G5:  { note: "ソ",   freq: 783.99 }
+};
+
+const SHIN_TAKARAJIMA_MOTIFS = {
+  // ソ レ ド レ ／ ファ レ ド レ レ
+  F:  "G4:1 D5:2 C5:1 D5:2 F5:4 D5:2 C5:1 D5:2 D5:2",
+  // ソ レ ド レ ／ ソ(高) レ ド レ レ
+  S:  "G4:1 D5:2 C5:1 D5:2 G5:5 D5:2 C5:1 D5:2 D5:2",
+  // ソ レ ド レ ／ ソ(低) レ ド レ レ（間奏）
+  L:  "G4:1 D5:2 C5:1 D5:2 G4:1 D5:2 C5:1 D5:2 D5:2",
+  // ソ レ ド レ ／ ソ レ ド ファ ファ
+  SF: "G4:1 D5:2 C5:1 D5:2 G5:5 D5:2 C5:1 F5:4 F5:4",
+  // ソ ソ ド ド ／ ファ ソ シ♭ ド レ ファ ソ
+  R:  "G4:1 G4:1 C5:2 C5:2 F4:1 G4:2 Bb4:3 C5:1 D5:2 F5:4 G5:5",
+  // 大サビ最後：ソ レ ド レ ／ ソ レ ド レ レ ファ ファ
+  E:  "G4:1 D5:2 C5:1 D5:2 G5:5 D5:2 C5:1 D5:2 D5:2 F5:4 F5:4",
+  // 前奏・後奏の共通フレーズ：ソ ／ ファ レ ド ／ シ♭ ソ ／ ファ ／ ソ シ♭ ／ ド
+  P:  "G5:5 F5:4 D5:2 C5:1 Bb4:2 G4:1 F4:1 G4:1 Bb4:1 C5:2"
+};
+
+const SHIN_TAKARAJIMA_SECTIONS = [
+  ["前奏",   ["P", "Bb4:1 C5:2 D5:3 Bb4:1", "F5:4 D5:2 F5:4 D5:2 G5:5 F5:4"]],
+  ["Aメロ",  ["F","S","F","SF","F","S","S","S","S","F","S","S","F","R"]],
+  ["サビ",   ["F","S","F","SF","F","S","F","SF","F","S","F","SF"]],
+  ["間奏",   ["L","L","L","F","L","L","F","R"]],
+  ["サビ2",  ["F","S","F","SF","F","S","F","SF","F","F","F","F","F","S","F","R"]],
+  ["大サビ", ["F","S","F","SF","F","S","F","SF","F","S","F","E"]],
+  ["後奏",   [
+    "P", "Bb4:1 C5:2 D5:3 F5:4 G5:5",              // …ド シ♭ ド レ ファ ソ
+    "F5:4 D5:2 C5:1 Bb4:2 G4:1 F4:1 G4:1 Bb4:1 C5:2 A4:1 Bb4:2", // ファ レ ド … ド ラ シ♭
+    "P", "Bb4:1 C5:2 D5:3",                         // …ド シ♭ ド レ
+    "F5:4 D5:2 F5:4 D5:2",                          // ファ レ ファ レ
+    "P", "A4:1 Bb4:2",                              // …ド ラ シ♭
+    "F5:4 D5:2 F5:4 D5:2 G5:5"                      // ファ レ ファ レ ソー
+  ]]
+];
+
+const FINGER_KEY_BY_NUM = { 1: "THUMB", 2: "INDEX", 3: "MIDDLE", 4: "RING", 5: "PINKY" };
+
+function buildShinTakarajimaSequence() {
+  const seq = [];
+  SHIN_TAKARAJIMA_SECTIONS.forEach(([, parts], sectionIdx) => {
+    parts.forEach((part) => {
+      const tokens = (SHIN_TAKARAJIMA_MOTIFS[part] || part).split(/\s+/);
+      tokens.forEach((token) => {
+        const [rightNote, finger] = token.split(":");
+        const fingerNum = Number(finger);
+        const info = SHIN_TAKARAJIMA_NOTES[rightNote];
+        seq.push({
+          step: seq.length + 1,
+          phrase: sectionIdx + 1,
+          fingerNum,
+          fingerKey: FINGER_KEY_BY_NUM[fingerNum],
+          note: info.note,
+          rightNote,
+          freq: info.freq,
+          autoLeftNote: null
+        });
+      });
+    });
+  });
+  return seq;
+}
+
+export const SHIN_TAKARAJIMA_SEQUENCE = buildShinTakarajimaSequence();
+
 // 演奏曲リスト（自分のペースで1音ずつ進めるステップ演奏）
 export const SONGS = {
   ode_to_joy: {
@@ -715,6 +794,11 @@ export const SONGS = {
     id: "mary_had_a_little_lamb",
     title: "メリーさんの羊",
     sequence: MARY_HAD_A_LITTLE_LAMB_SEQUENCE
+  },
+  shin_takarajima: {
+    id: "shin_takarajima",
+    title: "新宝島",
+    sequence: SHIN_TAKARAJIMA_SEQUENCE
   }
 };
 
