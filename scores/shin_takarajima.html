@@ -25,7 +25,7 @@
 <body>
 <main>
   <h1>新宝島（サカナクション）</h1>
-  <p class="sub">右手メロディ譜 ・ 4/4 ・ ハ長調表記（ユーザー提供の音名・リズム・指使いをもとに作成）・ 音符の上の数字＝指番号</p>
+  <p class="sub">右手メロディ譜 ・ 4/4 ・ ♩=149（前奏）／♩=156（Aメロ以降） ・ 調号♭2つ（シ♭・ミ♭）（ユーザー提供の音名・リズム・指使いをもとに作成）・ 音符の上の数字＝指番号</p>
 
   <div class="paper"><div id="score"></div></div>
   <div class="controls"><button id="play">▶ 再生</button></div>
@@ -35,7 +35,7 @@
     <ul>
       <li><b>前奏</b> 10小節 → <b>Aメロ</b> 28小節 → <b>サビ</b> 24小節 → <b>間奏</b> 16小節 → <b>サビ2</b> 32小節 → <b>大サビ</b> 24小節 → <b>後奏</b> 28小節</li>
       <li>基本形「ソ レ ド レ ／ ファ レ ド レ レ」は1枚目の写真のリズム（2小節）。5音目（ファ／ソ）は1小節目の最後の8分音符で、2小節目は裏拍のシンコペーションです。</li>
-      <li>基本形の1音目のソ＝G4（親指）、5音目のソ＝G5（小指・指番号は推定）。間奏の「2回目は低いソ」は5音目をG4（親指）にしています。</li>
+      <li>調号によりシはすべてシ♭（B♭）。基本形の1音目のソ＝G4（親指）、5音目のソ＝G5（小指・指番号は推定）。間奏の「2回目は低いソ」は5音目をG4（親指）にしています。</li>
       <li>前奏のリズムは2・3枚目の写真どおり。最後の「ソー／ファー」は全音符2つにしています。</li>
       <li><b>推定箇所</b>（写真にないリズム）：「ソ ソ ド ド／ファソシドレファソ」、大サビ最後の「…レレファファ」、後奏の「ファソ」「ド ラ シ」「レ（伸ばし）」。音源と違えば教えてください。</li>
     </ul>
@@ -92,11 +92,11 @@ T:新宝島
 C:サカナクション
 M:4/4
 L:1/8
-Q:1/4=117
-K:C
+Q:1/4=149
+K:Bb
 ` +
 intro +
-section("Aメロ", ["F","S","F","SF","F","S","S","S","S","F","S","S","F","R"]) +
+"[Q:1/4=156]" + section("Aメロ", ["F","S","F","SF","F","S","S","S","S","F","S","S","F","R"]) +
 section("サビ",  ["F","S","F","SF","F","S","F","SF","F","S","F","SF"]) +
 section("間奏",  ["L","L","L","F","L","L","F","R"]) +
 section("サビ2", ["F","S","F","SF","F","S","F","SF","F","F","F","F","F","S","F","R"]) +
@@ -112,14 +112,19 @@ const visual = ABCJS.renderAbc("score", abc, {
 
 // 再生ボタン（リズム確認用）
 // 外部の音源ファイルを使わず、Web Audio のオシレーターで直接鳴らす（オフラインでも再生可）
-const BPM = 117;
-const SEC_PER_WHOLE = (60 / BPM) * 4;
+const INTRO_BPM = 149, MAIN_BPM = 156;
+const INTRO_WHOLES = 10; // 前奏10小節（全音符10個分）
+const spw = bpm => (60 / bpm) * 4; // 全音符1個の秒数
+// 楽譜上の位置（全音符単位）→ 秒。前奏だけ♩=149、以降は♩=156
+const toSec = w => w <= INTRO_WHOLES
+  ? w * spw(INTRO_BPM)
+  : INTRO_WHOLES * spw(INTRO_BPM) + (w - INTRO_WHOLES) * spw(MAIN_BPM);
 let ctx = null, voices = [], endTimer = null;
 const btn = document.getElementById("play");
 
 function collectNotes() {
   // abcjs の音声データ（start/duration は全音符単位、pitch は MIDI 番号）
-  const audio = visual[0].setUpAudio({ qpm: BPM });
+  const audio = visual[0].setUpAudio();
   const notes = [];
   audio.tracks.forEach(t => t.forEach(ev => { if (ev.cmd === "note") notes.push(ev); }));
   return notes;
@@ -139,20 +144,32 @@ btn.addEventListener("click", async () => {
   const t0 = ctx.currentTime + 0.1;
   let end = 0;
   collectNotes().forEach(n => {
-    const start = t0 + n.start * SEC_PER_WHOLE;
-    const dur = Math.max(0.08, n.duration * SEC_PER_WHOLE * 0.95);
+    const start = t0 + toSec(n.start);
+    const dur = Math.max(0.08, (toSec(n.start + n.duration) - toSec(n.start)) * 0.95);
     const freq = 440 * Math.pow(2, (n.pitch - 69) / 12);
-    const osc = ctx.createOscillator(), gain = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.value = freq;
+    // シンセリード：デチューンしたノコギリ波2本 → ローパスフィルター（開閉エンベロープ付き）
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.Q.value = 6;
+    filter.frequency.setValueAtTime(freq * 1.5, start);
+    filter.frequency.linearRampToValueAtTime(Math.min(9000, freq * 8), start + 0.02);
+    filter.frequency.exponentialRampToValueAtTime(freq * 3, start + Math.min(0.25, dur));
     gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(0.3, start + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.12, start + Math.min(0.3, dur));
-    gain.gain.setValueAtTime(0.12, start + dur - 0.03);
+    gain.gain.linearRampToValueAtTime(0.14, start + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.09, start + Math.min(0.2, dur));
+    gain.gain.setValueAtTime(0.09, start + dur - 0.03);
     gain.gain.linearRampToValueAtTime(0, start + dur);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(start); osc.stop(start + dur + 0.02);
-    voices.push(osc);
+    filter.connect(gain).connect(ctx.destination);
+    [-7, 7].forEach(cents => {
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.value = freq;
+      osc.detune.value = cents;
+      osc.connect(filter);
+      osc.start(start); osc.stop(start + dur + 0.02);
+      voices.push(osc);
+    });
     end = Math.max(end, start + dur);
   });
   btn.textContent = "■ 停止";
