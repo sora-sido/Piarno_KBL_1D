@@ -118,6 +118,11 @@ h2 { margin: 0; font-size: 1rem; font-weight: 600; }
       <p class="lead">打鍵の録画データ（<code>public/dataset</code>）を、アプリと同じ判定処理にコマ単位で通した結果です。録画には映像は残っていないため、各コマの手は記録された「手首・指の付け根・指先」の座標から描き直しています。</p>
     </header>
 
+    <div role="note" style="border:1px solid var(--label);border-radius:4px;padding:12px 16px;display:grid;gap:4px;font-size:.88rem;line-height:1.65">
+      <b style="color:var(--label)">この録画は「新宝島」などの曲の演奏ではありません</b>
+      <span>判定の調整用に記録された録画（2026年9月にリポジトリに追加）です。<b>1本の指だけで同じ打鍵をくり返した</b>もので、親指は71回、中指は94回、薬指は91回、小指は58回叩いています。打鍵の間隔は約0.37〜0.6秒です。曲の何音目かという対応はありません。打鍵の番号は、録画の中で叩いた順番です。</span>
+    </div>
+
     <section class="summary" id="summary" aria-label="指ごとの検出率"></section>
 
     <div class="controls">

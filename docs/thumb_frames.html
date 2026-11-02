@@ -133,6 +133,12 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <p class="lead">親指の打鍵録画（71回・約27秒・59fps）を、アプリと同じ判定にコマ単位で通した結果です。音が<b>鳴った瞬間</b>と、<b>鳴るべきだった瞬間</b>（録画時に付けた打鍵の印）を並べて表示し、見逃した打鍵には原因を数値付きで示します。録画に映像は残っていないため、手は「手首・親指の付け根・親指の先」の座標から描き直しています。</p>
     </header>
 
+    <div role="note" style="border:1px solid var(--should);border-radius:4px;padding:12px 16px;display:grid;gap:4px;font-size:.88rem;line-height:1.65">
+      <b style="color:var(--should)">この録画は「新宝島」の演奏ではありません</b>
+      <span>判定の調整用に記録された <code>public/dataset/thumb/thumb_tap_01.csv</code> です（2026年9月にリポジトリに追加）。曲を弾いたものではなく、<b>親指だけで同じ打鍵を約0.37秒おきに71回くり返した</b>録画です。そのため、1回1回の打鍵に、曲の何音目かという対応はありません。打鍵の番号（#1〜#71）は、録画の中で叩いた順番です。</span>
+      <span style="color:var(--muted)">参考までに、新宝島（♩=156）の8分音符の間隔は約0.19秒です。この録画の約半分の間隔で叩くことになります。</span>
+    </div>
+
     <section class="kpis" id="kpis"></section>
 
     <section>
