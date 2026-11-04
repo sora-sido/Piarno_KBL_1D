@@ -962,6 +962,10 @@ export function beginPositioning(onStart) {
 // ずれたら枠の色と文字で知らせる
 let pipStatusFrame = 0;
 let pipBadSince = null;
+let driftDismissedSong = null;      // 矢印をタップして非表示にした曲
+const DRIFT_SHOW_MS = 2500;          // ずれがこの時間続いたら知らせる
+const LOST_SHOW_MS = 3000;           // 手を見失ってこの時間たったら知らせる
+const RECENT_HIT_SUPPRESS_MS = 2000; // 直近にこの時間以内に音が鳴っていれば、弾けているので知らせない
 const PIP_SILHOUETTE = `<rect x="14" y="6" width="74" height="16" rx="8"/><rect x="8" y="18" width="12" height="30" rx="6" transform="rotate(-18 14 18)"/><rect x="27" y="16" width="12" height="40" rx="6"/><rect x="42" y="14" width="12" height="44" rx="6"/><rect x="57" y="16" width="12" height="41" rx="6"/><rect x="72" y="18" width="11" height="34" rx="5.5"/>`;
 function updatePipStatus(landmarks) {
   if (++pipStatusFrame % 3 !== 0) return;
@@ -971,7 +975,10 @@ function updatePipStatus(landmarks) {
   const now = performance.now();
   if (r.ok) pipBadSince = null;
   else if (pipBadSince === null) pipBadSince = now;
-  const bad = pipBadSince !== null && now - pipBadSince > 600;
+  const lastHit = Math.max(lastHitTime, freeLastAnyHit);
+  const playingWell = now - lastHit < RECENT_HIT_SUPPRESS_MS;
+  const waitMs = r.code === "nohand" ? LOST_SHOW_MS : DRIFT_SHOW_MS;
+  const bad = pipBadSince !== null && now - pipBadSince > waitMs && !playingWell && driftDismissedSong !== currentSongId;
   vc.style.setProperty("--pip-border", r.ok ? "rgba(61,220,132,0.9)" : bad ? "rgba(240,98,108,0.95)" : "rgba(255,255,255,0.4)");
 
   let guide = vc.querySelector(".pip-guide");
@@ -1010,12 +1017,18 @@ function updatePipStatus(landmarks) {
     big.id = "drift-badge";
     big.className = "dir-badge drift-badge";
     big.setAttribute("role", "status");
+    big.title = "タップすると、この曲の間は表示しません";
+    big.addEventListener("click", (e) => {
+      e.stopPropagation();
+      driftDismissedSong = currentSongId;
+      big.hidden = true;
+    });
     document.body.appendChild(big);
   }
   const dir = bad ? r.dir : null;
   if (big.dataset.dir !== String(dir)) {
     big.dataset.dir = String(dir);
-    big.innerHTML = dir ? directionGraphic(dir) : "";
+    big.innerHTML = dir ? `${directionGraphic(dir)}<div class="drift-dismiss">タップで非表示</div>` : "";
   }
   big.hidden = !dir;
 }

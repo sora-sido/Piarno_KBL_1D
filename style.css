@@ -1087,6 +1087,15 @@ body.positioning .hand-guide-widget {
   border: 2px solid #ffd23f;
   animation: drift-blink 1s ease-in-out infinite;
 }
+/* 位置合わせ側の .dir-badge（クリック透過）より優先させてタップで消せるようにする */
+.dir-badge.drift-badge {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.drift-badge .drift-dismiss {
+  font-size: 11px;
+  color: #9aa4b4;
+}
 .drift-badge .dir-icon {
   width: clamp(120px, 32vmin, 230px) !important;
   height: clamp(120px, 32vmin, 230px) !important;

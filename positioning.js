@@ -16,10 +16,10 @@
 // 右手を置く目標の枠（画面上の割合）。手の中心がこの枠の中心付近、手の高さが枠の高さに近いのが理想
 export const TARGET_BOX = { x: 0.14, y: 0.24, w: 0.72, h: 0.56 };
 export const DESK_LINE_Y = 0.80; // 机の線（枠の下辺）
-const CENTER_TOL_X = 0.12;     // 手の中心と枠の中心の許容ずれ（横）
+const CENTER_TOL_X = 0.16;     // 手の中心と枠の中心の許容ずれ（横）
 const CENTER_TOL_Y = 0.20;     // 同（縦）。机に手を置いたままでも合うよう広めにとる
-const SIZE_MIN = 0.38;         // 手の横幅が画面の幅に占める割合の下限
-const SIZE_MAX = 0.80;         // 同・上限
+const SIZE_MIN = 0.30;         // 手の横幅が画面の幅に占める割合の下限
+const SIZE_MAX = 0.88;         // 同・上限
 const EDGE_MARGIN = 0.02;      // 指先が画面の端からはみ出していないかの余白
 const HOLD_MS = 1000;          // 良い位置でこの時間止まったら決定
 
@@ -33,9 +33,10 @@ const state = {
 };
 
 // 演奏中、最初の位置からどれだけずれたら知らせるか
-const DRIFT_TOL_X = 0.08;
-const DRIFT_TOL_Y = 0.09;
-const DRIFT_SCALE = 0.22;   // 手の横幅が最初より±22%以上変わったら（近づいた／離れた）
+// 演奏中の警告は演奏の邪魔にならないよう緩め（細かいずれでは知らせない）
+const DRIFT_TOL_X = 0.15;
+const DRIFT_TOL_Y = 0.16;
+const DRIFT_SCALE = 0.40;   // 手の横幅が最初より±40%以上変わったら（近づいた／離れた）
 
 export function getReferenceBox() {
   return state.reference;
@@ -59,7 +60,6 @@ export function evaluateDrift(landmarks) {
   else if (rcx - cx > DRIFT_TOL_X) { code = "left"; dir = "right"; message = "最初の位置より左にずれています。手を右へ戻してください"; }
   else if (cy - rcy > DRIFT_TOL_Y) { code = "down"; dir = "up"; message = "最初の位置より下にずれています。手を少し上へ"; }
   else if (rcy - cy > DRIFT_TOL_Y) { code = "up"; dir = "down"; message = "最初の位置より上にずれています。手を少し下へ"; }
-  else if (!base.checks.visible) { code = "edge"; dir = "center"; message = "指先が画面の端で切れています"; }
   return { ok: code === "ok", code, dir, message, box: b, ref };
 }
 
