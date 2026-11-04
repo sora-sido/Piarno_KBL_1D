@@ -1109,3 +1109,27 @@ body.positioning .hand-guide-widget {
 @media (prefers-reduced-motion: reduce) {
   .drift-badge { animation: none; }
 }
+
+/* ノーツのレーン背景（5本の縞）。動かないので canvas で毎フレーム描かずに CSS で表示 */
+.lane-bg {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  z-index: 214;
+  background: repeating-linear-gradient(90deg,
+    rgba(255, 255, 255, 0.012) 0 20%,
+    rgba(255, 255, 255, 0.025) 20% 40%);
+}
+body.play-mode .lane-bg {
+  display: block;
+}
+body.positioning .lane-bg {
+  display: none;
+}
+.lane-bg .lane-active {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20%;
+  display: none;
+}

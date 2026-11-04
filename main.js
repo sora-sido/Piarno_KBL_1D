@@ -968,7 +968,7 @@ const LOST_SHOW_MS = 3000;           // 手を見失ってこの時間たった�
 const RECENT_HIT_SUPPRESS_MS = 2000; // 直近にこの時間以内に音が鳴っていれば、弾けているので知らせない
 const PIP_SILHOUETTE = `<rect x="14" y="6" width="74" height="16" rx="8"/><rect x="8" y="18" width="12" height="30" rx="6" transform="rotate(-18 14 18)"/><rect x="27" y="16" width="12" height="40" rx="6"/><rect x="42" y="14" width="12" height="44" rx="6"/><rect x="57" y="16" width="12" height="41" rx="6"/><rect x="72" y="18" width="11" height="34" rx="5.5"/>`;
 function updatePipStatus(landmarks) {
-  if (++pipStatusFrame % 3 !== 0) return;
+  if (++pipStatusFrame % 6 !== 0) return;
   const vc = document.querySelector(".video-container");
   if (!vc) return;
   const r = evaluateDrift(landmarks);
@@ -1568,6 +1568,40 @@ function layoutPlayView() {
   playLayout.topY = 58;
   playLayout.hitY = Math.max(playLayout.topY + 140, handTop + S * 0.08 - 26);
   LANE_ORDER.forEach((k, i) => { playLayout.lanes[k] = left + playLayout.laneW * (i + 0.5); });
+
+  // レーンの背景は動かないので、毎フレーム描かずに CSS の要素で表示する（描画の負担を減らす）
+  const bg = getLaneBackground();
+  bg.style.left = `${left}px`;
+  bg.style.top = `${playLayout.topY}px`;
+  bg.style.width = `${width}px`;
+  bg.style.height = `${playLayout.hitY - playLayout.topY}px`;
+  laneActiveKey = null;
+}
+
+let laneActiveKey = null;
+function getLaneBackground() {
+  let bg = document.getElementById("lane-bg");
+  if (!bg) {
+    bg = document.createElement("div");
+    bg.id = "lane-bg";
+    bg.className = "lane-bg";
+    bg.innerHTML = `<div class="lane-active"></div>`;
+    const notes = document.getElementById("notes-canvas");
+    notes.parentNode.insertBefore(bg, notes);
+  }
+  return bg;
+}
+
+// いま光らせるレーン（曲の演奏＝次に弾く指、フリー演奏＝直前に叩いた指）
+function setActiveLane(key, color) {
+  const sig = `${key}|${color}`;
+  if (laneActiveKey === sig) return;
+  laneActiveKey = sig;
+  const el = getLaneBackground().querySelector(".lane-active");
+  const i = LANE_ORDER.indexOf(key);
+  el.style.display = i < 0 ? "none" : "block";
+  el.style.left = `${(i / 5) * 100}%`;
+  el.style.background = color;
 }
 window.addEventListener("resize", () => layoutPlayView());
 window.addEventListener("orientationchange", () => setTimeout(layoutPlayView, 250));
@@ -1595,13 +1629,8 @@ function drawRhythmHighway(now) {
   if (Math.abs(target - viewOnset) < 0.01) viewOnset = target;
   const yOf = (onset) => hitY - (onset - viewOnset) * ppe;
 
-  // レーンの背景
-  LANE_ORDER.forEach((k, i) => {
-    const x = left + laneW * i;
-    const active = k === currentFingerKey;
-    ctx.fillStyle = active ? "rgba(255,255,255,0.07)" : (i % 2 ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.012)");
-    ctx.fillRect(x, topY, laneW, hitY - topY);
-  });
+  // レーンの背景は CSS（#lane-bg）。次に弾く指のレーンだけ明るくする
+  setActiveLane(currentFingerKey, "rgba(255,255,255,0.08)");
 
   // 小節線（4拍ごと）と拍の線
   const firstE = Math.ceil(viewOnset - 1);
@@ -1649,15 +1678,16 @@ function drawRhythmHighway(now) {
     ctx.globalAlpha = played ? alpha * 0.35 : 1;
 
     if (isLead) {
-      const pulse = 0.5 + 0.5 * Math.sin(now * 0.008);
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 14 + 10 * pulse;
+      // 光の縁取り（ぼかし効果 shadowBlur は重いので、半透明の一回り大きい枠で代用）
+      ctx.beginPath();
+      ctx.roundRect(x - 5, top - 5, w + 10, h + 10, 12);
+      ctx.fillStyle = hexToRgba(color, 0.28);
+      ctx.fill();
     }
     ctx.beginPath();
     ctx.roundRect(x, top, w, h, 8);
     ctx.fillStyle = isLead ? color : hexToRgba(color, 0.55);
     ctx.fill();
-    ctx.shadowBlur = 0;
     ctx.lineWidth = isLead ? 3 : 1.2;
     ctx.strokeStyle = isLead ? "#ffffff" : hexToRgba(color, 0.95);
     ctx.stroke();
@@ -1784,12 +1814,9 @@ function drawFreeHighway(now) {
   const ctx = notesCtx;
   const { hitY, topY, laneW, left, width } = playLayout;
   if (hitY <= topY) return;
-  LANE_ORDER.forEach((k, i) => {
-    const x = left + laneW * i;
-    const recent = freeHitMarks.some((m) => m.finger === k && now - m.t < 250);
-    ctx.fillStyle = recent ? hexToRgba(LANE_COLORS[k], 0.16) : (i % 2 ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.012)");
-    ctx.fillRect(x, topY, laneW, hitY - topY);
-  });
+  const lastMark = freeHitMarks[freeHitMarks.length - 1];
+  if (lastMark && now - lastMark.t < 250) setActiveLane(lastMark.finger, hexToRgba(LANE_COLORS[lastMark.finger], 0.16));
+  else setActiveLane(null, "");
   // 昇っていく光（約0.9秒で消える）
   for (let i = freeHitMarks.length - 1; i >= 0; i--) {
     const m = freeHitMarks[i];
@@ -1892,7 +1919,8 @@ export function triggerNoteHitEffect(stepIndex) {
  */
 function resizeNotesCanvas() {
   if (!notesCanvas || !notesCtx) return;
-  const dpr = window.devicePixelRatio || 1;
+  // 解像度は最大1.5倍まで（iPhone の3倍で描くと塗る画素数が4倍になり、手の認識と処理を奪い合うため）
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   const w = window.innerWidth;
   const h = window.innerHeight;
   if (notesCanvas.width !== w * dpr || notesCanvas.height !== h * dpr) {
@@ -1906,12 +1934,26 @@ window.addEventListener("resize", resizeNotesCanvas);
 /**
  * 毎フレームのノーツ描画とアニメーション更新（画面上部から指先への落下）
  */
+let lastNotesSignature = "";
 function updateAndRenderNotes() {
   if (!notesCanvas || !notesCtx) return;
   resizeNotesCanvas();
 
   const w = window.innerWidth;
   const h = window.innerHeight;
+
+  // 画面に変化がないフレームは描き直さない（ノーツが止まって打鍵を待っている間など）。
+  // 描画が手の認識と同じ処理の上で動くため、空いた時間を認識に回す
+  const lead = currentSequence && currentSequence[Math.min(currentSongStep, currentSequence.length - 1)];
+  const scrolling = playMode && lead && typeof lead.onset === "number" && Math.abs(lead.onset - viewOnset) > 0.01;
+  const animating = noteHitParticles.length > 0 || freeHitMarks.length > 0 || scrolling;
+  const signature = [playMode, isPositioning(), isClearing, currentSongId, currentSongStep, currentFingerKey,
+    viewOnset.toFixed(3), w, h, playLayout.hitY].join("|");
+  if (!animating && signature === lastNotesSignature) {
+    requestAnimationFrame(updateAndRenderNotes);
+    return;
+  }
+  lastNotesSignature = signature;
   notesCtx.clearRect(0, 0, w, h);
 
   const now = performance.now();
