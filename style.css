@@ -1301,3 +1301,39 @@ body.is-recording .settings-rec-dot {
 .top-right-controls {
   z-index: 450;
 }
+
+/* ==========================================================================
+   画面の一番上の進捗バー（曲全体の長さのうちどこまで進んだか。文字なし）
+   ========================================================================== */
+.song-progress-bar {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  z-index: 460;
+  pointer-events: none;
+  display: none;
+}
+body.play-mode .song-progress-bar {
+  display: block;
+}
+body.free-mode .song-progress-bar,
+body.positioning .song-progress-bar {
+  display: none;
+}
+.song-progress-bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: rgba(255, 255, 255, 0.85);
+  transition: width 0.35s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .song-progress-bar > span { transition: none; }
+}
+/* 進捗バッジは曲名だけになったので、文字を少し読みやすく */
+.song-progress-badge .badge-song {
+  margin-right: 0;
+}

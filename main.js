@@ -1332,7 +1332,24 @@ export function updateHandGuideWidget(fingerKey, fingerNum, note) {
 /**
  * 楽曲進行とターゲット指UIの更新
  */
+/**
+ * 画面上端の進捗バー：音の数ではなく、曲全体の長さ（リズム上の時間）のうちどこまで進んだか
+ */
+function updateProgressBar() {
+  const bar = document.getElementById("song-progress-bar");
+  if (!bar) return;
+  const free = isFreePlay();
+  document.body.classList.toggle("free-mode", free);
+  if (free || !currentSequence || !currentSequence.length) return;
+  const last = currentSequence[currentSequence.length - 1];
+  const total = (last.onset || 0) + (last.ioi || 0);
+  const lead = currentSequence[Math.min(currentSongStep, currentSequence.length - 1)];
+  const pct = total > 0 ? Math.max(0, Math.min(1, (lead.onset || 0) / total)) * 100 : 0;
+  bar.firstElementChild.style.width = `${pct.toFixed(2)}%`;
+}
+
 export function renderSongGuideUI() {
+  updateProgressBar();
   if (isFreePlay()) {
     updateHandGuideWidget(currentFingerKey, FINGER_CONFIGS[currentFingerKey].fingerNum, FREE_NOTE_BY_FINGER[currentFingerKey].note);
     if (songProgressBadge) {
@@ -1363,9 +1380,9 @@ export function renderSongGuideUI() {
     const song = SONGS[currentSongId];
     const section = currentSongId === "shin_takarajima" && SHIN_TAKARAJIMA_SECTIONS[currentItem.phrase - 1]
       ? `・${SHIN_TAKARAJIMA_SECTIONS[currentItem.phrase - 1][0]}` : "";
-    songProgressBadge.innerHTML = `<span class="badge-song"></span><span class="badge-count"></span>`;
+    // 進み具合は画面上端のバーで示すので、ここは曲名（とセクション）だけ
+    songProgressBadge.innerHTML = `<span class="badge-song"></span>`;
     songProgressBadge.querySelector(".badge-song").textContent = `${song ? song.title : ""}${section}`;
-    songProgressBadge.querySelector(".badge-count").textContent = `${currentItem.step} / ${currentSequence.length}`;
   }
 }
 
