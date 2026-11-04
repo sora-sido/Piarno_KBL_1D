@@ -104,7 +104,7 @@ table.pal { border-collapse: collapse; font-size: .84rem; width: 100%; min-width
       <h2>見比べる</h2>
       <div class="studio">
         <div class="pv"><h3>今のデザイン<span>アプリの現状</span></h3><div class="phone"><canvas id="cv-now" aria-label="今のデザインのプレビュー"></canvas></div></div>
-        <div class="pv"><h3>検討中<span id="pv-caption">右のパネルで切り替え</span></h3><div class="phone"><canvas id="cv-try" aria-label="検討中のデザインのプレビュー"></canvas></div></div>
+        <div class="pv"><h3>検討中<span id="pv-caption">数字なし・形は今のまま</span></h3><div class="phone"><canvas id="cv-try" aria-label="検討中のデザインのプレビュー"></canvas></div></div>
         <div class="panel" id="panel">
           <div class="ctl"><span>色が表すもの</span><div class="seg" data-k="color">
             <button type="button" data-v="finger">指ごと</button>
@@ -121,6 +121,9 @@ table.pal { border-collapse: collapse; font-size: .84rem; width: 100%; min-width
             <button type="button" data-v="name">音名</button>
             <button type="button" data-v="namefinger">音名＋指番号</button>
             <button type="button" data-v="finger">指番号</button></div></div>
+          <div class="ctl"><span>判定ラインの指番号（1〜5）</span><div class="seg" data-k="receptor">
+            <button type="button" data-v="none">なし</button>
+            <button type="button" data-v="number">表示</button></div></div>
           <div class="ctl"><span>高い音・低い音</span><div class="seg" data-k="octave">
             <button type="button" data-v="off">区別しない</button>
             <button type="button" data-v="dot">点で区別</button></div></div>
@@ -194,8 +197,9 @@ const PALETTES = {
 const PITCH = { C: "#E8453C", D: "#F5922F", E: "#F2D23C", F: "#5BBF5A", G: "#3A8EE6", A: "#6A5CD6", "B♭": "#B04FC9" };
 const CYAN = "#00E5FF";
 
-const STATE_NOW = { color: "finger", palette: "current", shape: "bar", label: "namefinger", octave: "off", hand: "cyan" };
-const st = { color: "finger", palette: "cud", shape: "head", label: "name", octave: "dot", hand: "match" };
+const STATE_NOW = { color: "finger", palette: "current", shape: "bar", label: "namefinger", octave: "off", hand: "cyan", receptor: "number" };
+// 検討中：数字（1〜5）なし・形は今の長方形のまま・色覚に配慮した指ごとの配色・低い音に点・手の指もノーツと同じ色
+const st = { color: "finger", palette: "cud", shape: "bar", label: "name", octave: "dot", hand: "match", receptor: "none" };
 
 function hexRgb(h) { const v = parseInt(h.slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
 function rgba(h, a) { const [r, g, b] = hexRgb(h); return `rgba(${r},${g},${b},${a})`; }
@@ -324,12 +328,16 @@ function drawStage(cv, o, view, step) {
     const t = tips.find((q) => q.k === k);
     ctx.strokeStyle = rgba(lc.startsWith("#") ? lc : "#9aa4b4", active ? 0.7 : 0.2); ctx.lineWidth = active ? 2 : 1;
     ctx.beginPath(); ctx.moveTo(cx, hitY + 9); ctx.lineTo(t.x, t.y); ctx.stroke();
-    ctx.beginPath(); ctx.roundRect(cx - 13, hitY - 8, 26, 16, 8);
+    const withNum = o.receptor === "number";
+    const rw = withNum ? 26 : 20, rh = withNum ? 16 : 10;
+    ctx.beginPath(); ctx.roundRect(cx - rw / 2, hitY - rh / 2, rw, rh, rh / 2);
     ctx.fillStyle = active ? (lc.startsWith("#") ? lc : "#9aa4b4") : "rgba(20,22,28,0.9)"; ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = lc.startsWith("#") ? lc : "#9aa4b4"; ctx.stroke();
-    ctx.fillStyle = active ? "#0b0d12" : (lc.startsWith("#") ? lc : "#9aa4b4");
-    ctx.font = "700 11px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(String(FK.indexOf(k) + 1), cx, hitY + 0.5);
+    if (withNum) {
+      ctx.fillStyle = active ? "#0b0d12" : (lc.startsWith("#") ? lc : "#9aa4b4");
+      ctx.font = "700 11px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(String(FK.indexOf(k) + 1), cx, hitY + 0.5);
+    }
   });
 }
 
