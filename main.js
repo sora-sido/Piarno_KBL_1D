@@ -1763,20 +1763,12 @@ function drawRhythmHighway(now) {
   ctx.restore();
   ctx.globalAlpha = 1;
 
-  // 判定ライン（白い線1本）と、各レーンから手のイラストの指先への細い線。
-  // 指番号（1〜5）とそれを入れていた枠は表示しない（レーンの位置・色と指先への線で伝わるため）
+  // 判定ライン（白い線1本）のみ。
+  // 指番号（1〜5）とその枠、レーンと手の指先を結ぶ線は表示しない
+  // （どの指かは、レーンの位置と、ノーツと同じ色で光る手のイラストの指で伝わるため）
   ctx.strokeStyle = "rgba(255,255,255,0.85)";
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(left, hitY); ctx.lineTo(left + width, hitY); ctx.stroke();
-  LANE_ORDER.forEach((k) => {
-    const cx = playLayout.lanes[k];
-    const active = k === currentFingerKey;
-    const color = LANE_COLORS[k];
-    const tip = getGuideFingerScreenPos(k);
-    ctx.strokeStyle = hexToRgba(color, active ? 0.75 : 0.2);
-    ctx.lineWidth = active ? 2 : 1;
-    ctx.beginPath(); ctx.moveTo(cx, hitY + 2); ctx.lineTo(tip.x, tip.y); ctx.stroke();
-  });
 }
 
 // ==========================================================================
@@ -1891,10 +1883,6 @@ function drawFreeHighway(now) {
     const cx = playLayout.lanes[k];
     const color = LANE_COLORS[k];
     const recent = k === freeLastFinger;
-    const tip = getGuideFingerScreenPos(k);
-    ctx.strokeStyle = hexToRgba(color, recent ? 0.8 : 0.3);
-    ctx.lineWidth = recent ? 2 : 1;
-    ctx.beginPath(); ctx.moveTo(cx, hitY + 16); ctx.lineTo(tip.x, tip.y); ctx.stroke();
     const w = Math.min(laneW - 8, 64), h = 34;
     ctx.beginPath();
     ctx.roundRect(cx - w / 2, hitY - h / 2, w, h, 10);
