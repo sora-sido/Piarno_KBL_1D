@@ -980,3 +980,55 @@ html, body {
 }
 
 
+
+/* ==========================================================================
+   演奏画面：手のガイドとノーツを大きく、カメラは左下の小窓（body.play-mode）
+   ========================================================================== */
+body.play-mode .video-container {
+  position: fixed;
+  left: var(--pip-left, 12px);
+  top: var(--pip-top, 12px);
+  width: var(--pip-w, 200px) !important;
+  height: var(--pip-h, 150px) !important;
+  z-index: 230;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid var(--pip-border, rgba(255, 255, 255, 0.35));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  transition: border-color 0.2s ease;
+}
+
+body.play-mode .hand-guide-widget {
+  opacity: 1;
+}
+
+.pip-status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4px 6px;
+  background: rgba(200, 50, 60, 0.85);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.35;
+  z-index: 6;
+}
+
+.pip-status[hidden] {
+  display: none;
+}
+
+/* 手の位置合わせ中：カメラを大きく表示し、手のガイドは隠す */
+body.positioning .hand-guide-widget {
+  display: none;
+}
+
+/* 狭い画面では進捗バッジを左上に寄せ、右上のボタン群と重ならないようにする */
+@media (max-width: 560px) {
+  .song-progress-badge {
+    left: calc(16px + env(safe-area-inset-left, 0px));
+    transform: none;
+    top: calc(22px + env(safe-area-inset-top, 0px));
+  }
+}

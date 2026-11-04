@@ -9,6 +9,7 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
 import { setupRecordButton, onPlayStart, onHit as onRecordHit, recordFrame, isRecording } from "./recorder.js";
+import { startPositioning, updatePositioning, isPositioning, evaluateHandPosition } from "./positioning.js";
 
 // 打鍵→発音の遅延対策：Tone.js は時刻未指定の発音を既定で lookAhead（0.1秒）後に予約するため、
 // 0 にして打鍵判定と同じ瞬間に鳴らす（リアルタイム演奏用。シーケンス再生はしないので先読みは不要）
@@ -724,37 +725,39 @@ const SHIN_TAKARAJIMA_NOTES = {
   G5:  { note: "ソ",   freq: 783.99 }
 };
 
+// 書式: "音名:指番号:次の音までの長さ:音の長さ"（長さは8分音符=1。音の長さを省くと「次の音までの長さ」と同じ）
+// リズムは scores/shin_takarajima.html の楽譜と同じ（タイでつながる音は1音にまとめて長さを合計）
 const SHIN_TAKARAJIMA_MOTIFS = {
-  // ソ レ ド レ ／ ファ レ ド レ レ
-  F:  "G4:1 D5:2 C5:1 D5:2 F5:4 D5:2 C5:1 D5:2 D5:2",
+  // ソ レ ド レ ／ ファ レ ド レ レ（♩ ♩ ♩ ♪♪ ｜ 𝄾♪ 𝄾♪ 𝄾♪ 𝄾♪）
+  F:  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 F5:4:2:1 D5:2:2:1 C5:1:2:1 D5:2:2:1 D5:2:1",
   // ソ レ ド レ ／ ソ(高) レ ド レ レ
-  S:  "G4:1 D5:2 C5:1 D5:2 G5:5 D5:2 C5:1 D5:2 D5:2",
+  S:  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G5:5:2:1 D5:2:2:1 C5:1:2:1 D5:2:2:1 D5:2:1",
   // ソ レ ド レ ／ ソ(低) レ ド レ レ（間奏）
-  L:  "G4:1 D5:2 C5:1 D5:2 G4:1 D5:2 C5:1 D5:2 D5:2",
+  L:  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G4:1:2:1 D5:2:2:1 C5:1:2:1 D5:2:2:1 D5:2:1",
   // ソ レ ド レ ／ ソ レ ド ファ ファ
-  SF: "G4:1 D5:2 C5:1 D5:2 G5:5 D5:2 C5:1 F5:4 F5:4",
+  SF: "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G5:5:2:1 D5:2:2:1 C5:1:2:1 F5:4:2:1 F5:4:1",
   // ソ ソ ド ド ／ ファ ソ シ♭ ド レ ファ ソ
-  R:  "G4:1 G4:1 C5:2 C5:2 F4:1 G4:2 Bb4:3 C5:1 D5:2 F5:4 G5:5",
+  R:  "G4:1:2 G4:1:2 C5:2:2 C5:2:1 F4:1:2:1 G4:2:1 Bb4:3:1 C5:1:1 D5:2:1 F5:4:1 G5:5:2",
   // 大サビ最後：ソ レ ド レ ／ ソ レ ド レ レ ファ ファ
-  E:  "G4:1 D5:2 C5:1 D5:2 G5:5 D5:2 C5:1 D5:2 D5:2 F5:4 F5:4",
+  E:  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G5:5:2:1 D5:2:2:1 C5:1:1 D5:2:1 D5:2:1 F5:4:1 F5:4:1",
   // 前奏・後奏の共通フレーズ：ソ ／ ファ レ ド ／ シ♭ ソ ／ ファ ／ ソ シ♭ ／ ド
-  P:  "G5:5 F5:4 D5:2 C5:1 Bb4:2 G4:1 F4:1 G4:1 Bb4:1 C5:2"
+  P:  "G5:5:8 F5:4:4 D5:2:2 C5:1:4 Bb4:2:2 G4:1:10 F4:1:2 G4:1:4 Bb4:1:4 C5:2:4"
 };
 
 const SHIN_TAKARAJIMA_SECTIONS = [
-  ["前奏",   ["P", "Bb4:1 C5:2 D5:3 Bb4:1", "F5:4 D5:2 F5:4 D5:2 G5:5 F5:4"]],
+  ["前奏",   ["P", "Bb4:1:2 C5:2:4 D5:3:2 Bb4:1:4", "F5:4:2 D5:2:2 F5:4:2 D5:2:2 G5:5:16 F5:4:16"]],
   ["Aメロ",  ["F","S","F","SF","F","S","S","S","S","F","S","S","F","R"]],
   ["サビ",   ["F","S","F","SF","F","S","F","SF","F","S","F","SF"]],
   ["間奏",   ["L","L","L","F","L","L","F","R"]],
   ["サビ2",  ["F","S","F","SF","F","S","F","SF","F","F","F","F","F","S","F","R"]],
   ["大サビ", ["F","S","F","SF","F","S","F","SF","F","S","F","E"]],
   ["後奏",   [
-    "P", "Bb4:1 C5:2 D5:3 F5:4 G5:5",              // …ド シ♭ ド レ ファ ソ
-    "F5:4 D5:2 C5:1 Bb4:2 G4:1 F4:1 G4:1 Bb4:1 C5:2 A4:1 Bb4:2", // ファ レ ド … ド ラ シ♭
-    "P", "Bb4:1 C5:2 D5:3",                         // …ド シ♭ ド レ
-    "F5:4 D5:2 F5:4 D5:2",                          // ファ レ ファ レ
-    "P", "A4:1 Bb4:2",                              // …ド ラ シ♭
-    "F5:4 D5:2 F5:4 D5:2 G5:5"                      // ファ レ ファ レ ソー
+    "P", "Bb4:1:2 C5:2:4 D5:3:2 F5:4:2 G5:5:2",                                       // …ド シ♭ ド レ ファ ソ
+    "F5:4:4 D5:2:2 C5:1:4 Bb4:2:2 G4:1:10 F4:1:2 G4:1:4 Bb4:1:4 C5:2:4 A4:1:2 Bb4:2:2", // ファ レ ド … ド ラ シ♭
+    "P", "Bb4:1:2 C5:2:4 D5:3:6",                                                     // …ド シ♭ ド レ
+    "F5:4:2 D5:2:2 F5:4:2 D5:2:2",                                                    // ファ レ ファ レ
+    "P", "A4:1:2 Bb4:2:2",                                                            // …ド ラ シ♭
+    "F5:4:2 D5:2:2 F5:4:2 D5:2:2 G5:5:8"                                              // ファ レ ファ レ ソー
   ]]
 ];
 
@@ -766,7 +769,7 @@ function buildShinTakarajimaSequence() {
     parts.forEach((part) => {
       const tokens = (SHIN_TAKARAJIMA_MOTIFS[part] || part).split(/\s+/);
       tokens.forEach((token) => {
-        const [rightNote, finger] = token.split(":");
+        const [rightNote, finger, ioi, dur] = token.split(":");
         const fingerNum = Number(finger);
         const info = SHIN_TAKARAJIMA_NOTES[rightNote];
         seq.push({
@@ -777,7 +780,9 @@ function buildShinTakarajimaSequence() {
           note: info.note,
           rightNote,
           freq: info.freq,
-          autoLeftNote: null
+          autoLeftNote: null,
+          ioi: Number(ioi),
+          dur: Number(dur || ioi)
         });
       });
     });
@@ -786,6 +791,44 @@ function buildShinTakarajimaSequence() {
 }
 
 export const SHIN_TAKARAJIMA_SEQUENCE = buildShinTakarajimaSequence();
+
+// ---- リズム（8分音符=1）。落ちてくるノーツの間隔と長さに使う ----
+// よろこびのうた：4分音符=2。4・8・16小節目は「付点4分・8分・2分」、10・11小節目に8分音符2つ
+const ODE_TO_JOY_RHYTHM = [
+  2, 2, 2, 2,  2, 2, 2, 2,  2, 2, 2, 2,  3, 1, 4,
+  2, 2, 2, 2,  2, 2, 2, 2,  2, 2, 2, 2,  3, 1, 4,
+  2, 2, 2, 2,  2, 1, 1, 2, 2,  2, 1, 1, 2, 2,  2, 2, 4,
+  2, 2, 2, 2,  2, 2, 2, 2,  2, 2, 2, 2,  3, 1, 4
+];
+// メリーさんの羊：4分音符=2。2〜4小節目の最後は2分音符、8小節目は全音符
+const MARY_RHYTHM = [
+  2, 2, 2, 2,  2, 2, 4,  2, 2, 4,  2, 2, 4,
+  2, 2, 2, 2,  2, 2, 2, 2,  2, 2, 2, 2,  8
+];
+
+function applyRhythm(seq, rhythm) {
+  if (rhythm.length !== seq.length) {
+    console.warn(`[RHYTHM] 音の数（${seq.length}）とリズムの数（${rhythm.length}）が一致しません`);
+  }
+  seq.forEach((n, i) => {
+    n.ioi = rhythm[i] || 2;
+    n.dur = rhythm[i] || 2;
+  });
+}
+
+// 各音の開始位置（曲頭からの8分音符の数）を計算
+function annotateOnsets(seq) {
+  let t = 0;
+  seq.forEach((n) => {
+    if (typeof n.ioi !== "number") { n.ioi = 2; n.dur = 2; }
+    n.onset = t;
+    t += n.ioi;
+  });
+}
+
+applyRhythm(ODE_TO_JOY_SEQUENCE, ODE_TO_JOY_RHYTHM);
+applyRhythm(MARY_HAD_A_LITTLE_LAMB_SEQUENCE, MARY_RHYTHM);
+[ODE_TO_JOY_SEQUENCE, MARY_HAD_A_LITTLE_LAMB_SEQUENCE, SHIN_TAKARAJIMA_SEQUENCE].forEach(annotateOnsets);
 
 // 演奏曲リスト（自分のペースで1音ずつ進めるステップ演奏）
 export const SONGS = {
@@ -879,6 +922,43 @@ export function startCountdown(callback) {
 // 完走クリア演出の状態管理（クリア演出中は打鍵認識を一時停止）
 export let isClearing = false;
 let clearTimerId = null;
+
+/**
+ * 手の位置合わせを開き、終わったら演奏画面に切り替えてカウントダウンを始める
+ */
+export function beginPositioning(onStart) {
+  const vc = document.querySelector(".video-container");
+  setPlayMode(false);
+  tapState = "IDLE";
+  startPositioning(vc, () => {
+    setPlayMode(true);
+    resetNoteView();
+    startCountdown(onStart);
+  });
+}
+
+// 演奏中：小窓のカメラの枠の色で、手が位置合わせの枠から外れていないかを知らせる
+let pipStatusFrame = 0;
+let pipBadSince = null;
+function updatePipStatus(landmarks) {
+  if (++pipStatusFrame % 6 !== 0) return;
+  const vc = document.querySelector(".video-container");
+  if (!vc) return;
+  const r = evaluateHandPosition(landmarks);
+  const now = performance.now();
+  if (r.ok) pipBadSince = null;
+  else if (pipBadSince === null) pipBadSince = now;
+  const bad = pipBadSince !== null && now - pipBadSince > 1200;
+  vc.style.setProperty("--pip-border", r.ok ? "rgba(61,220,132,0.85)" : bad ? "rgba(240,98,108,0.95)" : "rgba(255,255,255,0.35)");
+  let label = vc.querySelector(".pip-status");
+  if (!label) {
+    label = document.createElement("div");
+    label.className = "pip-status";
+    vc.appendChild(label);
+  }
+  label.textContent = bad ? r.message : "";
+  label.hidden = !bad;
+}
 
 /**
  * 演奏記録（recorder.js）に渡す曲と判定基準の情報
@@ -987,6 +1067,7 @@ export function selectSong(songId, withCountdown = true) {
   if (typeof noteProgressMap !== "undefined") {
     noteProgressMap.clear();
   }
+  resetNoteView();
 
   // 右上ポップアップメニューのアクティブクラス更新
   document.querySelectorAll(".song-menu-item").forEach((btn) => {
@@ -1329,6 +1410,219 @@ export function getGuideFingerScreenPos(fingerKey) {
 // 各ノーツのスムーズな進行度キャッシュ (stepIndex -> 現在の進行度 0.0〜1.0)
 export const noteProgressMap = new Map();
 
+// ==========================================================================
+// 演奏画面（演奏中は手のガイドとノーツを大きく、カメラは左下の小窓に）
+// ==========================================================================
+export let playMode = false;
+const LANE_ORDER = ["THUMB", "INDEX", "MIDDLE", "RING", "PINKY"];
+const LANE_COLORS = { THUMB: "#ff8a3d", INDEX: "#ffd23f", MIDDLE: "#3ddc84", RING: "#3db8ff", PINKY: "#c08cff" };
+const playLayout = { hitY: 0, topY: 0, laneW: 0, left: 0, width: 0, lanes: {} };
+// ノーツの表示位置（曲頭からの8分音符の数）。打鍵のたびに次の音の位置へなめらかに進む
+let viewOnset = 0;
+
+export function setPlayMode(on) {
+  playMode = on;
+  document.body.classList.toggle("play-mode", on);
+  layoutPlayView();
+}
+
+export function resetNoteView() {
+  const n = currentSequence && currentSequence[currentSongStep];
+  viewOnset = n && typeof n.onset === "number" ? n.onset : 0;
+}
+
+/**
+ * 演奏画面のレイアウト計算（画面サイズ・向きが変わるたびに実行）
+ */
+function layoutPlayView() {
+  const widget = document.getElementById("hand-guide-widget");
+  const vc = document.querySelector(".video-container");
+  const W = window.innerWidth, H = window.innerHeight;
+  if (!playMode) {
+    if (widget) {
+      ["left", "top", "right", "bottom"].forEach((k) => widget.style.removeProperty(k));
+      widget.style.setProperty("--hand-guide-size", "200px");
+    }
+    return;
+  }
+  const aspect = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--video-aspect")) || 4 / 3;
+
+  // カメラの小窓（左下）
+  const pipW = Math.round(Math.min(W * 0.3, 260, H * 0.22 * aspect));
+  const pipH = Math.round(pipW / aspect);
+  const pipLeft = 12, pipTop = H - pipH - 12;
+  if (vc) {
+    vc.style.setProperty("--pip-w", `${pipW}px`);
+    vc.style.setProperty("--pip-h", `${pipH}px`);
+    vc.style.setProperty("--pip-left", `${pipLeft}px`);
+    vc.style.setProperty("--pip-top", `${pipTop}px`);
+  }
+
+  // 手のガイド（下中央に大きく）。手のイラストは 200x200 の枠の x=36〜155, y=24〜172 に描かれている
+  const S = Math.round(Math.min(H * 0.4, W * 0.62, 420));
+  let handLeft = (W - S) / 2;
+  const minLeft = pipLeft + pipW + 8 - S * 0.18; // 小窓と重ならないように
+  if (handLeft < minLeft) handLeft = Math.min(minLeft, W - S * 0.8);
+  const handTop = H - 4 - S * 0.86;
+  if (widget) {
+    widget.style.left = `${handLeft}px`;
+    widget.style.top = `${handTop}px`;
+    widget.style.right = "auto";
+    widget.style.bottom = "auto";
+    widget.style.setProperty("--hand-guide-size", `${S}px`);
+  }
+
+  // ノーツが落ちてくるレーン（親指〜小指の5本）と判定ライン
+  const width = Math.min(W - 24, 560);
+  const left = (W - width) / 2;
+  playLayout.width = width;
+  playLayout.left = left;
+  playLayout.laneW = width / 5;
+  playLayout.topY = 58;
+  playLayout.hitY = Math.max(playLayout.topY + 140, handTop + S * 0.08 - 26);
+  LANE_ORDER.forEach((k, i) => { playLayout.lanes[k] = left + playLayout.laneW * (i + 0.5); });
+}
+window.addEventListener("resize", () => layoutPlayView());
+window.addEventListener("orientationchange", () => setTimeout(layoutPlayView, 250));
+
+function laneHitPos(fingerKey) {
+  return { x: playLayout.lanes[fingerKey] || window.innerWidth / 2, y: playLayout.hitY };
+}
+
+/**
+ * リズムが分かるノーツの描画
+ * - 縦方向の位置＝曲の中の時間（音と音の間隔がそのまま距離になる）
+ * - ノーツの長さ＝音の長さ
+ * - 次に弾く音は判定ライン上で待ち、弾くまで消えない
+ */
+function drawRhythmHighway(now) {
+  const ctx = notesCtx;
+  const { hitY, topY, laneW, left, width } = playLayout;
+  const seq = currentSequence;
+  if (!seq || !seq.length || hitY <= topY) return;
+  const ppe = Math.max(14, Math.min(46, (hitY - topY) / 18)); // 8分音符1つぶんの高さ(px)
+
+  const lead = seq[Math.min(currentSongStep, seq.length - 1)];
+  const target = typeof lead.onset === "number" ? lead.onset : 0;
+  viewOnset += (target - viewOnset) * 0.2;
+  if (Math.abs(target - viewOnset) < 0.01) viewOnset = target;
+  const yOf = (onset) => hitY - (onset - viewOnset) * ppe;
+
+  // レーンの背景
+  LANE_ORDER.forEach((k, i) => {
+    const x = left + laneW * i;
+    const active = k === currentFingerKey;
+    ctx.fillStyle = active ? "rgba(255,255,255,0.07)" : (i % 2 ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.012)");
+    ctx.fillRect(x, topY, laneW, hitY - topY);
+  });
+
+  // 小節線（4拍ごと）と拍の線
+  const firstE = Math.ceil(viewOnset - 1);
+  for (let e = firstE; ; e++) {
+    const y = yOf(e);
+    if (y < topY) break;
+    if (y > hitY) continue;
+    if (e % 8 === 0) {
+      ctx.strokeStyle = "rgba(255,255,255,0.28)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + width, y); ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.45)";
+      ctx.font = "11px sans-serif";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${e / 8 + 1}`, left - 4, y);
+    } else if (e % 2 === 0) {
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + width, y); ctx.stroke();
+    }
+  }
+
+  // ノーツ（下端＝音の始まり、長さ＝音の長さ）
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left - 2, topY, width + 4, hitY - topY + 30);
+  ctx.clip();
+  for (let i = Math.max(0, currentSongStep - 2); i < seq.length; i++) {
+    const n = seq[i];
+    const yb = yOf(n.onset);
+    if (yb < topY) break;
+    const isLead = i === currentSongStep;
+    const played = i < currentSongStep;
+    let alpha = 1;
+    if (played) {
+      alpha = Math.max(0, 1 - (yb - hitY) / 30);
+      if (alpha <= 0) continue;
+    }
+    const h = Math.max(34, n.dur * ppe - 4);
+    const x = playLayout.lanes[n.fingerKey] - (laneW - 10) / 2;
+    const w = laneW - 10;
+    const color = LANE_COLORS[n.fingerKey] || "#00e5ff";
+    const top = yb - h;
+    ctx.globalAlpha = played ? alpha * 0.35 : 1;
+
+    if (isLead) {
+      const pulse = 0.5 + 0.5 * Math.sin(now * 0.008);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 14 + 10 * pulse;
+    }
+    ctx.beginPath();
+    ctx.roundRect(x, top, w, h, 8);
+    ctx.fillStyle = isLead ? color : hexToRgba(color, 0.55);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = isLead ? 3 : 1.2;
+    ctx.strokeStyle = isLead ? "#ffffff" : hexToRgba(color, 0.95);
+    ctx.stroke();
+
+    // 音名（大きく）と指番号
+    ctx.fillStyle = isLead ? "#0b0d12" : "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    const fs = Math.max(14, Math.min(26, laneW * 0.32));
+    ctx.font = `bold ${fs}px "Hiragino Sans", "Noto Sans JP", sans-serif`;
+    ctx.fillText(n.note, x + w / 2, yb - 14);
+    if (h > fs + 22) {
+      ctx.font = `bold ${Math.round(fs * 0.55)}px sans-serif`;
+      ctx.fillText(`${n.fingerNum}`, x + w / 2, top + fs * 0.7);
+    }
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  // 判定ラインと各指の受け口
+  ctx.strokeStyle = "rgba(255,255,255,0.85)";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(left, hitY); ctx.lineTo(left + width, hitY); ctx.stroke();
+  LANE_ORDER.forEach((k) => {
+    const cx = playLayout.lanes[k];
+    const active = k === currentFingerKey;
+    const color = LANE_COLORS[k];
+    // 受け口から手のイラストの指先へ細い線
+    const tip = getGuideFingerScreenPos(k);
+    ctx.strokeStyle = hexToRgba(color, active ? 0.7 : 0.18);
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.beginPath(); ctx.moveTo(cx, hitY + 10); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+    ctx.beginPath();
+    ctx.roundRect(cx - 15, hitY - 9, 30, 18, 9);
+    ctx.fillStyle = active ? color : "rgba(20,22,28,0.9)";
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.fillStyle = active ? "#0b0d12" : color;
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${FINGER_CONFIGS[k].fingerNum}`, cx, hitY + 0.5);
+  });
+}
+
+function hexToRgba(hex, a) {
+  const v = parseInt(hex.slice(1), 16);
+  return `rgba(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}, ${a})`;
+}
+
 // 打鍵HIT時の弾けるパーティクル配列
 const noteHitParticles = [];
 
@@ -1339,8 +1633,8 @@ const noteHitParticles = [];
 export function triggerNoteHitEffect(stepIndex) {
   const item = currentSequence[stepIndex];
   if (!item) return;
-  const targetPos = getGuideFingerScreenPos(item.fingerKey);
-  const color = getTargetFingerColor(stepIndex);
+  const targetPos = playMode ? laneHitPos(item.fingerKey) : getGuideFingerScreenPos(item.fingerKey);
+  const color = playMode ? { stroke: LANE_COLORS[item.fingerKey], fill: LANE_COLORS[item.fingerKey] } : getTargetFingerColor(stepIndex);
 
   // 1. 弾けるリング（ショックウェーブ）
   noteHitParticles.push({
@@ -1402,88 +1696,9 @@ function updateAndRenderNotes() {
 
   const now = performance.now();
 
-  // 1. 各指のガイドライン（画面上端から指先への極薄ネオンレーン）
-  const fingerKeys = ["THUMB", "INDEX", "MIDDLE", "RING", "PINKY"];
-  fingerKeys.forEach((fKey) => {
-    const pos = getGuideFingerScreenPos(fKey);
-    const isTarget = fKey === currentFingerKey;
-    notesCtx.beginPath();
-    notesCtx.moveTo(pos.x, 24);
-    notesCtx.lineTo(pos.x, pos.y);
-    notesCtx.strokeStyle = isTarget ? "rgba(0, 229, 255, 0.18)" : "rgba(255, 255, 255, 0.04)";
-    notesCtx.lineWidth = isTarget ? 2.0 : 1.0;
-    notesCtx.stroke();
-  });
-
-  // 2. カウントダウン中や完走中以外の時、ノーツを描画
-  if (currentSequence && currentSequence.length > 0 && !isClearing) {
-    // 現在のステップから最大4音先までを逆順で描画（先頭ノーツを手前に表示）
-    const maxAhead = 4;
-    for (let i = maxAhead - 1; i >= 0; i--) {
-      const stepIdx = currentSongStep + i;
-      if (stepIdx >= currentSequence.length) continue;
-
-      const item = currentSequence[stepIdx];
-      const targetPos = getGuideFingerScreenPos(item.fingerKey);
-      const color = getTargetFingerColor(stepIdx);
-
-      // 目標進行度: 先頭(i=0)は 1.0 (指先に完全着地)、それ以降は 0.72, 0.44, 0.16 と上部に配置
-      const targetProg = i === 0 ? 1.0 : Math.max(0.12, 1.0 - i * 0.28);
-
-      // スムーズな補間移動（Lerp）
-      let curProg = noteProgressMap.get(stepIdx);
-      if (curProg === undefined) {
-        curProg = Math.max(0, targetProg - 0.35);
-      }
-      curProg += (targetProg - curProg) * 0.14;
-      noteProgressMap.set(stepIdx, curProg);
-
-      // 画面上のY座標（画面上端 44px から指先 targetPos.y へ）
-      const startY = 44;
-      const curX = targetPos.x;
-      const curY = startY + (targetPos.y - startY) * curProg;
-
-      // 先頭ノーツ（現在叩くべき音）は指先で優しくパルス発光
-      const isLead = i === 0;
-      const pulse = isLead ? 1.0 + 0.08 * Math.sin(now * 0.007) : 1.0;
-      const alpha = Math.min(1.0, curProg * 1.5);
-
-      // ノーツの描画（ネオン発光カプセル）
-      notesCtx.save();
-      notesCtx.translate(curX, curY);
-      notesCtx.scale(pulse, pulse);
-      notesCtx.globalAlpha = alpha;
-
-      const capsuleW = 54;
-      const capsuleH = 28;
-      const radius = 14;
-
-      // 外側ネオングロー
-      notesCtx.beginPath();
-      notesCtx.roundRect(-capsuleW / 2, -capsuleH / 2, capsuleW, capsuleH, radius);
-      notesCtx.fillStyle = color.halo || "rgba(0, 229, 255, 0.3)";
-      notesCtx.fill();
-
-      // メインカプセル背景（ダーク半透明）
-      notesCtx.beginPath();
-      notesCtx.roundRect(-capsuleW / 2, -capsuleH / 2, capsuleW, capsuleH, radius);
-      notesCtx.fillStyle = "rgba(10, 10, 15, 0.88)";
-      notesCtx.fill();
-
-      // ネオン境界線
-      notesCtx.strokeStyle = color.stroke || "#00e5ff";
-      notesCtx.lineWidth = isLead ? 2.5 : 1.6;
-      notesCtx.stroke();
-
-      // カプセル内テキスト（運指番号＋音名、例: "3 ミ"）
-      notesCtx.fillStyle = "#ffffff";
-      notesCtx.font = "bold 13px 'Inter', sans-serif";
-      notesCtx.textAlign = "center";
-      notesCtx.textBaseline = "middle";
-      notesCtx.fillText(`${item.fingerNum} ${item.note}`, 0, 1);
-
-      notesCtx.restore();
-    }
+  // 1〜2. 演奏中のみ：リズムが分かるノーツのレーン（位置合わせ中・起動前は描かない）
+  if (playMode && !isPositioning() && !isClearing) {
+    drawRhythmHighway(now);
   }
 
   // 3. パーティクル・ショックウェーブの描画と更新
@@ -2043,9 +2258,9 @@ async function handleStartPlay() {
       startModal.classList.add("hidden");
     }
 
-    // 4. カウントダウン（3・2・1・START!）を開始して演奏へ移行
+    // 4. 手の位置合わせ → カウントダウン（3・2・1・START!）→ 演奏
     await requestWakeLock();
-    startCountdown(() => {
+    beginPositioning(() => {
       console.log(`[START] 演奏開始: ${SONGS[selectedStartSongId].title}`);
     });
   } catch (error) {
@@ -2065,7 +2280,7 @@ async function handleStartPlay() {
           schedulePredictLoop();
           await requestWakeLock();
           if (startModal) startModal.classList.add("hidden");
-          startCountdown(() => {
+          beginPositioning(() => {
             console.log(`[START] 演奏開始: ${SONGS[selectedStartSongId].title}`);
           });
           updateStatus("トラッキング中");
@@ -2704,6 +2919,13 @@ function drawRawHandLandmarks(results) {
   const selectedRightHand = selectRightHandLandmarks(results);
   const hasHands = selectedRightHand !== null;
 
+  // 手の位置合わせ（起動時の枠表示）と、演奏中の小窓の枠の色
+  if (isPositioning()) {
+    updatePositioning(selectedRightHand);
+  } else if (playMode) {
+    updatePipStatus(selectedRightHand);
+  }
+
   if (!hasHands) {
     lostFrames++;
     // 3フレーム以内（約50ms）の一時的ロストであれば直前の平滑化座標で描画を維持し、画面の点滅・ジャンプを防止
@@ -2818,7 +3040,7 @@ function drawRawHandLandmarks(results) {
   const frameState = tapState;
   let frameHit = false;
 
-  if (tapState === "IDLE" && !isCountingDown && !isClearing && !isReacquired) {
+  if (tapState === "IDLE" && !isCountingDown && !isClearing && !isReacquired && !isPositioning()) {
     // 平滑化変位が打鍵閾値以上 かつ 下降速度が速度閾値以上（勢いよく振り下ろされた瞬間）
     if (currentRy >= hitRyThreshold && tipVy >= hitVyThreshold && now - lastHitTime >= MIN_TAP_INTERVAL_MS) {
       tapState = "TOUCHED";
@@ -2870,6 +3092,7 @@ function drawRawHandLandmarks(results) {
         showClearNotification(() => {
           currentSongStep = 0;
           noteProgressMap.clear();
+          resetNoteView();
           const resetTarget = currentSequence[0];
           setTargetFinger(resetTarget.fingerKey);
           renderSongGuideUI();
@@ -3372,6 +3595,23 @@ if (csvFileInput) {
 }
 
 // 画面右上の丸い楽曲選択ボタンとメニュー
+// 右上：手の位置合わせをやり直すボタン
+const topRightControlsForPos = document.querySelector(".top-right-controls");
+if (topRightControlsForPos) {
+  const posBtn = document.createElement("button");
+  posBtn.type = "button";
+  posBtn.id = "position-btn";
+  posBtn.className = "ctrl-circle-btn";
+  posBtn.title = "手の位置合わせをやり直す";
+  posBtn.setAttribute("aria-label", "手の位置合わせをやり直す");
+  posBtn.innerHTML = `<svg viewBox="0 0 24 24" class="btn-icon" aria-hidden="true" style="width:20px;height:20px;fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><circle cx="12" cy="12" r="2.5"/></svg>`;
+  posBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (isPredicting && !isPositioning()) beginPositioning(() => {});
+  });
+  topRightControlsForPos.prepend(posBtn);
+}
+
 // 右上：演奏の記録ボタン（● → カウントダウン後の演奏を記録し、終了後に振り返り画面を表示）
 const topRightControls = document.querySelector(".top-right-controls");
 if (topRightControls) {
