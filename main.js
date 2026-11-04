@@ -830,6 +830,16 @@ applyRhythm(ODE_TO_JOY_SEQUENCE, ODE_TO_JOY_RHYTHM);
 applyRhythm(MARY_HAD_A_LITTLE_LAMB_SEQUENCE, MARY_RHYTHM);
 [ODE_TO_JOY_SEQUENCE, MARY_HAD_A_LITTLE_LAMB_SEQUENCE, SHIN_TAKARAJIMA_SEQUENCE].forEach(annotateOnsets);
 
+// フリー演奏で各指が鳴らす音
+export const FREE_PLAY_NOTES = [
+  { step: 1, phrase: 1, fingerNum: 1, fingerKey: "THUMB",  note: "ド",   rightNote: "C5", freq: 523.25, autoLeftNote: null, ioi: 2, dur: 2, onset: 0 },
+  { step: 2, phrase: 1, fingerNum: 2, fingerKey: "INDEX",  note: "レ",   rightNote: "D5", freq: 587.33, autoLeftNote: null, ioi: 2, dur: 2, onset: 2 },
+  { step: 3, phrase: 1, fingerNum: 3, fingerKey: "MIDDLE", note: "ミ",   rightNote: "E5", freq: 659.25, autoLeftNote: null, ioi: 2, dur: 2, onset: 4 },
+  { step: 4, phrase: 1, fingerNum: 4, fingerKey: "RING",   note: "ファ", rightNote: "F5", freq: 698.46, autoLeftNote: null, ioi: 2, dur: 2, onset: 6 },
+  { step: 5, phrase: 1, fingerNum: 5, fingerKey: "PINKY",  note: "ソ",   rightNote: "G5", freq: 783.99, autoLeftNote: null, ioi: 2, dur: 2, onset: 8 }
+];
+const FREE_NOTE_BY_FINGER = Object.fromEntries(FREE_PLAY_NOTES.map((n) => [n.fingerKey, n]));
+
 // 演奏曲リスト（自分のペースで1音ずつ進めるステップ演奏）
 export const SONGS = {
   ode_to_joy: {
@@ -851,8 +861,19 @@ export const SONGS = {
     id: "shin_takarajima",
     title: "新宝島",
     sequence: SHIN_TAKARAJIMA_SEQUENCE
+  },
+  // フリー演奏：楽譜なし。5本の指それぞれが決まった音を鳴らす（親指ド・人差し指レ・中指ミ・薬指ファ・小指ソ）
+  free: {
+    id: "free",
+    title: "フリー演奏",
+    free: true,
+    sequence: FREE_PLAY_NOTES
   }
 };
+
+export function isFreePlay() {
+  return !!(SONGS[currentSongId] && SONGS[currentSongId].free);
+}
 
 export let currentSongId = "ode_to_joy";
 export let currentSequence = SONGS.ode_to_joy.sequence;
@@ -880,7 +901,7 @@ export function startCountdown(callback) {
   const textEl = document.getElementById("countdown-text");
   if (!overlay || !textEl) {
     isCountingDown = false;
-    onPlayStart(buildRecordMeta());
+    if (!isFreePlay()) onPlayStart(buildRecordMeta());
     if (callback) callback();
     return;
   }
@@ -913,7 +934,7 @@ export function startCountdown(callback) {
       overlay.classList.add("hidden");
       isCountingDown = false;
       updateStateHud("IDLE", false);
-      onPlayStart(buildRecordMeta());
+      if (!isFreePlay()) onPlayStart(buildRecordMeta());
       if (callback) callback();
     }
   }, 1000);
@@ -1107,6 +1128,7 @@ export function selectSong(songId, withCountdown = true) {
     noteProgressMap.clear();
   }
   resetNoteView();
+  resetFreePlay();
 
   // 右上ポップアップメニューのアクティブクラス更新
   document.querySelectorAll(".song-menu-item").forEach((btn) => {
@@ -1292,6 +1314,14 @@ export function updateHandGuideWidget(fingerKey, fingerNum, note) {
  * 楽曲進行とターゲット指UIの更新
  */
 export function renderSongGuideUI() {
+  if (isFreePlay()) {
+    updateHandGuideWidget(currentFingerKey, FINGER_CONFIGS[currentFingerKey].fingerNum, FREE_NOTE_BY_FINGER[currentFingerKey].note);
+    if (songProgressBadge) {
+      songProgressBadge.innerHTML = `<span class="badge-song">フリー演奏</span><span class="badge-count"></span>`;
+      songProgressBadge.querySelector(".badge-count").textContent = `♪ ${freeTapCount}`;
+    }
+    return;
+  }
   const currentItem = currentSequence[currentSongStep];
   if (!currentItem) return;
 
@@ -1662,6 +1692,139 @@ function drawRhythmHighway(now) {
   });
 }
 
+// ==========================================================================
+// フリー演奏：5本の指それぞれに判定を持ち、叩いた指の音を鳴らす
+// ==========================================================================
+let freeTapCount = 0;
+let freeLastAnyHit = -Infinity;
+const freeState = {};
+const freeHitMarks = []; // 打鍵したレーンから上へ昇っていく光（{ finger, t }）
+
+export function resetFreePlay() {
+  freeTapCount = 0;
+  freeLastAnyHit = -Infinity;
+  freeHitMarks.length = 0;
+  LANE_ORDER.forEach((k) => { freeState[k] = { state: "IDLE", low: 0, last: -Infinity }; });
+}
+resetFreePlay();
+
+function handleFreePlay(width, height, now) {
+  const { ry, vy } = computeAllFingerFeatures(width, height);
+  const candidates = [];
+  LANE_ORDER.forEach((k) => {
+    const st = freeState[k];
+    const m = fingerThresholdModels[k] || { hitRy: 0.6, liftRy: 0.57 };
+    const vth = FINGER_VY_THRESHOLDS[k] || 6;
+    if (st.state === "TOUCHED") {
+      st.low = Math.max(st.low, ry[k]);
+      const rise = FINGER_RISE_TO_REARM[k] || 0.3;
+      if (ry[k] <= m.liftRy || st.low - ry[k] >= rise || vy[k] <= -LIFT_REBOUND_VY) st.state = "IDLE";
+      return;
+    }
+    if (ry[k] >= m.hitRy && vy[k] >= vth && now - st.last >= MIN_TAP_INTERVAL_MS) {
+      candidates.push({ k, strength: vy[k] / vth });
+    }
+  });
+  if (!candidates.length || now - freeLastAnyHit < 60) return;
+
+  // 指は隣どうしが連動して動くため、同じコマで条件を満たした指のうち、いちばん強く叩いた指だけを鳴らす。
+  // ほかの候補は「使用済み」として押下中にし、指を上げるまで鳴らさない
+  candidates.sort((a, b) => b.strength - a.strength);
+  candidates.forEach(({ k }, i) => {
+    freeState[k].state = "TOUCHED";
+    freeState[k].low = ry[k];
+    if (i === 0) freeState[k].last = now;
+  });
+  const hitKey = candidates[0].k;
+  freeLastAnyHit = now;
+  freeTapCount++;
+
+  const note = FREE_NOTE_BY_FINGER[hitKey];
+  playTapSound(note.rightNote, true, { duration: "2n", isBass: false });
+  setTargetFinger(hitKey);
+  renderSongGuideUI();
+  freeHitMarks.push({ finger: hitKey, t: now });
+  spawnHitParticles(playMode ? laneHitPos(hitKey) : getGuideFingerScreenPos(hitKey), LANE_COLORS[hitKey]);
+  const widget = document.getElementById("hand-guide-widget");
+  if (widget) {
+    widget.classList.add("hit-pop");
+    setTimeout(() => widget.classList.remove("hit-pop"), 160);
+  }
+  updateStateHud("TOUCHED", true);
+  console.log(`[FREE HIT] ${FINGER_NAMES[hitKey]} → ${note.note} (${note.rightNote})`);
+}
+
+function spawnHitParticles(pos, color) {
+  noteHitParticles.push({ type: "ring", x: pos.x, y: pos.y, radius: 10, maxRadius: 52, color, alpha: 1.0, decay: 0.05 });
+  for (let i = 0; i < 12; i++) {
+    const angle = (Math.PI * 2 * i) / 12 + (Math.random() - 0.5) * 0.4;
+    const speed = 2.5 + Math.random() * 3.5;
+    noteHitParticles.push({ type: "spark", x: pos.x, y: pos.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+      size: 3 + Math.random() * 2.5, color, alpha: 1.0, decay: 0.035 + Math.random() * 0.02 });
+  }
+}
+
+/**
+ * フリー演奏の画面：5本のレーンの下に音名（ド〜ソ）、叩くとそのレーンを光が昇っていく
+ */
+function drawFreeHighway(now) {
+  const ctx = notesCtx;
+  const { hitY, topY, laneW, left, width } = playLayout;
+  if (hitY <= topY) return;
+  LANE_ORDER.forEach((k, i) => {
+    const x = left + laneW * i;
+    const recent = freeHitMarks.some((m) => m.finger === k && now - m.t < 250);
+    ctx.fillStyle = recent ? hexToRgba(LANE_COLORS[k], 0.16) : (i % 2 ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.012)");
+    ctx.fillRect(x, topY, laneW, hitY - topY);
+  });
+  // 昇っていく光（約0.9秒で消える）
+  for (let i = freeHitMarks.length - 1; i >= 0; i--) {
+    const m = freeHitMarks[i];
+    const age = (now - m.t) / 900;
+    if (age >= 1) { freeHitMarks.splice(i, 1); continue; }
+    const cx = playLayout.lanes[m.finger];
+    const h = 60;
+    const yb = hitY - age * (hitY - topY);
+    ctx.globalAlpha = 1 - age;
+    ctx.beginPath();
+    ctx.roundRect(cx - (laneW - 10) / 2, yb - h, laneW - 10, h, 8);
+    ctx.fillStyle = LANE_COLORS[m.finger];
+    ctx.fill();
+    ctx.fillStyle = "#0b0d12";
+    ctx.font = `bold ${Math.max(14, Math.min(24, laneW * 0.3))}px "Hiragino Sans", "Noto Sans JP", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(FREE_NOTE_BY_FINGER[m.finger].note, cx, yb - h / 2);
+    ctx.globalAlpha = 1;
+  }
+  // 判定ラインと、各指の音名
+  ctx.strokeStyle = "rgba(255,255,255,0.85)";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(left, hitY); ctx.lineTo(left + width, hitY); ctx.stroke();
+  LANE_ORDER.forEach((k) => {
+    const cx = playLayout.lanes[k];
+    const color = LANE_COLORS[k];
+    const recent = freeHitMarks.some((m) => m.finger === k && now - m.t < 250);
+    const tip = getGuideFingerScreenPos(k);
+    ctx.strokeStyle = hexToRgba(color, recent ? 0.8 : 0.3);
+    ctx.lineWidth = recent ? 2 : 1;
+    ctx.beginPath(); ctx.moveTo(cx, hitY + 16); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+    const w = Math.min(laneW - 8, 64), h = 34;
+    ctx.beginPath();
+    ctx.roundRect(cx - w / 2, hitY - h / 2, w, h, 10);
+    ctx.fillStyle = recent ? color : "rgba(20,22,28,0.92)";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.fillStyle = recent ? "#0b0d12" : "#ffffff";
+    ctx.font = `bold 16px "Hiragino Sans", "Noto Sans JP", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(FREE_NOTE_BY_FINGER[k].note, cx, hitY + 1);
+  });
+}
+
 function hexToRgba(hex, a) {
   const v = parseInt(hex.slice(1), 16);
   return `rgba(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}, ${a})`;
@@ -1742,7 +1905,8 @@ function updateAndRenderNotes() {
 
   // 1〜2. 演奏中のみ：リズムが分かるノーツのレーン（位置合わせ中・起動前は描かない）
   if (playMode && !isPositioning() && !isClearing) {
-    drawRhythmHighway(now);
+    if (isFreePlay()) drawFreeHighway(now);
+    else drawRhythmHighway(now);
   }
 
   // 3. パーティクル・ショックウェーブの描画と更新
@@ -3078,6 +3242,15 @@ function drawRawHandLandmarks(results) {
 
   // 3. レベル2打鍵認識（変位 ＋ 平滑化下降速度ゲートにより机面静止待機誤爆を完全遮断）
   // カウントダウン中（3・2・1）、完走クリア演出中、および画面外復帰初フレームは打鍵認識を安全にスキップ
+  // フリー演奏：5本の指すべてを判定し、叩いた指の音を鳴らす（楽譜の判定は行わない）
+  if (isFreePlay()) {
+    if (!isCountingDown && !isClearing && !isReacquired && !isPositioning()) {
+      handleFreePlay(width, height, now);
+    }
+    updateDebugMetrics(smoothTip.x, smoothTip.y, currentRy, tipVy);
+    return;
+  }
+
   // 記録用：このコマの判定前の状態・弾くべき音
   const frameStep = currentSongStep;
   const frameTarget = currentFingerKey;
