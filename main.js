@@ -1933,18 +1933,27 @@ export function triggerNoteHitEffect(stepIndex) {
  * ノーツCanvasの解像度同期
  */
 function resizeNotesCanvas() {
-  if (!notesCanvas || !notesCtx) return;
+  if (!notesCanvas || !notesCtx) return false;
   // 解像度は最大1.5倍まで（iPhone の3倍で描くと塗る画素数が4倍になり、手の認識と処理を奪い合うため）
   const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   const w = window.innerWidth;
   const h = window.innerHeight;
-  if (notesCanvas.width !== w * dpr || notesCanvas.height !== h * dpr) {
-    notesCanvas.width = w * dpr;
-    notesCanvas.height = h * dpr;
-    notesCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // canvas の大きさは整数に丸める。丸めないと幅が奇数の画面（例：393px × 1.5 = 589.5）で毎フレーム
+  // 「大きさが違う」と判定されて canvas が作り直され（中身が消え）、描き直しを省いたフレームで真っ白になっていた
+  const cw = Math.round(w * dpr);
+  const ch = Math.round(h * dpr);
+  if (notesCanvas.width !== cw || notesCanvas.height !== ch) {
+    notesCanvas.width = cw;
+    notesCanvas.height = ch;
+    notesCtx.setTransform(cw / w, 0, 0, ch / h, 0, 0);
+    return true;
   }
+  return false;
 }
-window.addEventListener("resize", resizeNotesCanvas);
+window.addEventListener("resize", () => { resizeNotesCanvas(); lastNotesSignature = ""; });
+// アプリに戻ってきたとき（ブラウザが canvas の中身を捨てている場合がある）は描き直す
+document.addEventListener("visibilitychange", () => { lastNotesSignature = ""; });
+window.addEventListener("pageshow", () => { lastNotesSignature = ""; });
 
 /**
  * 毎フレームのノーツ描画とアニメーション更新（画面上部から指先への落下）
@@ -1962,9 +1971,23 @@ if (import.meta.env && import.meta.env.DEV) {
 }
 
 let lastNotesSignature = "";
+let lastNotesFullDraw = 0;
+const NOTES_FORCE_REDRAW_MS = 500; // 変化がなくても、この間隔で必ず描き直す（万一消えても元に戻るように）
+
 function updateAndRenderNotes() {
+  try {
+    renderNotesFrame();
+  } catch (err) {
+    // 描画中のエラーで描画ループが止まり、ノーツが消えたままにならないようにする
+    console.error("[NOTES] 描画エラー:", err);
+    lastNotesSignature = "";
+  }
+  requestAnimationFrame(updateAndRenderNotes);
+}
+
+function renderNotesFrame() {
   if (!notesCanvas || !notesCtx) return;
-  resizeNotesCanvas();
+  if (resizeNotesCanvas()) lastNotesSignature = "";
 
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -1976,11 +1999,12 @@ function updateAndRenderNotes() {
   const animating = noteHitParticles.length > 0 || freeHitMarks.length > 0 || scrolling;
   const signature = [playMode, isPositioning(), isClearing, currentSongId, currentSongStep, currentFingerKey,
     viewOnset.toFixed(3), w, h, playLayout.hitY].join("|");
-  if (!animating && signature === lastNotesSignature) {
-    requestAnimationFrame(updateAndRenderNotes);
+  const nowMs = performance.now();
+  if (!animating && signature === lastNotesSignature && nowMs - lastNotesFullDraw < NOTES_FORCE_REDRAW_MS) {
     return;
   }
   lastNotesSignature = signature;
+  lastNotesFullDraw = nowMs;
   notesCtx.clearRect(0, 0, w, h);
 
   const now = performance.now();
@@ -2023,8 +2047,6 @@ function updateAndRenderNotes() {
 
     notesCtx.restore();
   }
-
-  requestAnimationFrame(updateAndRenderNotes);
 }
 
 // ノーツ描画ループを開始
