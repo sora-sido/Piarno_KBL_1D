@@ -1714,7 +1714,13 @@ function drawRhythmHighway(now) {
     if (yb < topY) break;
     const isLead = i === currentSongStep;
     const played = i < currentSongStep;
-    const h = Math.max(34, n.dur * ppe - 4);
+    // 高さ＝音の長さ。ただし同じレーンの次のノーツの手前（6px）で必ず止め、長方形どうしが重ならないようにする
+    let nextSameLane = Infinity;
+    for (let j = i + 1; j < seq.length && seq[j].onset - n.onset < 64; j++) {
+      if (seq[j].fingerKey === n.fingerKey) { nextSameLane = seq[j].onset - n.onset; break; }
+    }
+    const room = nextSameLane * ppe - 6;
+    const h = Math.max(16, Math.min(Math.max(34, n.dur * ppe - 4), room));
     let alpha = 1;
     if (played) {
       // 弾いた音は判定ラインの下の帯を薄く流れていき、帯の下端に近づくにつれて消える
@@ -1728,35 +1734,38 @@ function drawRhythmHighway(now) {
     ctx.globalAlpha = played ? alpha * 0.5 : 1;
 
     if (isLead) {
-      // 光の縁取り（ぼかし効果 shadowBlur は重いので、半透明の一回り大きい枠で代用）
+      // 光の縁取り（ぼかし効果 shadowBlur は重いので、半透明の一回り大きい枠で代用）。
+      // 上下は3pxだけにして、上のノーツとの隙間に収める
       ctx.beginPath();
-      ctx.roundRect(x - 5, top - 5, w + 10, h + 10, 12);
+      ctx.roundRect(x - 5, top - 3, w + 10, h + 6, 11);
       ctx.fillStyle = hexToRgba(color, 0.28);
       ctx.fill();
     }
     ctx.beginPath();
-    ctx.roundRect(x, top, w, h, 8);
+    ctx.roundRect(x, top, w, h, Math.min(8, h / 2));
     ctx.fillStyle = isLead || played ? color : hexToRgba(color, 0.62);
     ctx.fill();
     ctx.lineWidth = isLead ? 3 : 1.2;
     ctx.strokeStyle = isLead ? "#ffffff" : hexToRgba(color, 0.95);
     ctx.stroke();
 
-    // 音名（指番号は出さない）。低いオクターブの音は音名の下に点を付ける
+    // 音名（指番号は出さない）を、ノーツの見えている部分の縦の真ん中に置く。
+    // 低いオクターブの音は音名の下に点を付け、音名と点をひとまとまりとして中央にそろえる
     ctx.fillStyle = isLead || played ? textColorOn(color) : "#ffffff";
     ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    const fs = Math.max(14, Math.min(26, laneW * 0.32));
+    ctx.textBaseline = "middle";
     const low = isLowOctave(n);
-    const dotRoom = low ? fs * 0.32 : 0;
+    const fsBase = Math.max(14, Math.min(26, laneW * 0.32));
+    const fs = Math.max(10, Math.min(fsBase, (h - 6) / (low ? 1.4 : 1.05)));
     ctx.font = `bold ${n.note.length > 1 ? fs * 0.8 : fs}px "Hiragino Sans", "Noto Sans JP", sans-serif`;
-    // 弾いた音で下端が帯からはみ出している場合も、見えている部分に音名を出す
-    const baseY = yb - 14 - dotRoom;
-    const labelY = played ? Math.max(top + fs + 4, Math.min(baseY, zoneBottom - 10 - dotRoom)) : baseY;
-    ctx.fillText(n.note, x + w / 2, labelY);
+    const visTop = Math.max(top, topY);
+    const visBottom = played ? Math.min(yb, zoneBottom) : yb;
+    const cy = (visTop + visBottom) / 2;
+    const glyphY = low ? cy - fs * 0.2 : cy;
+    ctx.fillText(n.note, x + w / 2, glyphY + 1);
     if (low) {
       ctx.beginPath();
-      ctx.arc(x + w / 2, labelY + fs * 0.34, Math.max(2, fs * 0.12), 0, Math.PI * 2);
+      ctx.arc(x + w / 2, glyphY + fs * 0.62, Math.max(1.8, fs * 0.11), 0, Math.PI * 2);
       ctx.fill();
     }
   }
