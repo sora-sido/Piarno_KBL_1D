@@ -1308,6 +1308,11 @@ updateCachedConnections(currentFingerKey);
  * @param {string} note "ド", "レ", "ミ" 等
  */
 export function updateHandGuideWidget(fingerKey, fingerNum, note) {
+  // 光る指の色をノーツ（レーン）と同じ色にする
+  const guide = document.getElementById("hand-guide-widget");
+  if (guide && typeof LANE_COLORS !== "undefined" && LANE_COLORS[fingerKey]) {
+    guide.style.setProperty("--active-finger-color", LANE_COLORS[fingerKey]);
+  }
   const fingerEls = document.querySelectorAll(".hand-finger");
   fingerEls.forEach((el) => {
     if (el.dataset.finger === fingerKey) {
@@ -1502,7 +1507,23 @@ export const noteProgressMap = new Map();
 // ==========================================================================
 export let playMode = false;
 const LANE_ORDER = ["THUMB", "INDEX", "MIDDLE", "RING", "PINKY"];
-const LANE_COLORS = { THUMB: "#ff8a3d", INDEX: "#ffd23f", MIDDLE: "#3ddc84", RING: "#3db8ff", PINKY: "#c08cff" };
+// 指ごとの色（docs/notes_design.html で検討）。色覚の違いがあっても隣どうしのレーンを見分けやすい
+// 橙・水色・黄・赤紫・青緑の組み合わせ。手のイラストの光る指も同じ色にする
+const LANE_COLORS = { THUMB: "#E69F00", INDEX: "#56B4E9", MIDDLE: "#F0E442", RING: "#CC79A7", PINKY: "#00B386" };
+
+// 色の上に載せる文字の色（明るい色には黒、暗い色には白）
+function textColorOn(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const L = 0.2126 * lin((v >> 16) & 255) + 0.7152 * lin((v >> 8) & 255) + 0.0722 * lin(v & 255);
+  return L > 0.3 ? "#0b0d12" : "#ffffff";
+}
+
+// 低いオクターブの音か（新宝島の F4・G4・A4・B♭4。右手の基本位置 C5〜G5 より下）
+function isLowOctave(note) {
+  const m = /(\d)$/.exec(note.rightNote || "");
+  return !!m && Number(m[1]) <= 4;
+}
 const playLayout = { hitY: 0, topY: 0, laneW: 0, left: 0, width: 0, lanes: {} };
 // ノーツの表示位置（曲頭からの8分音符の数）。打鍵のたびに次の音の位置へなめらかに進む
 let viewOnset = 0;
@@ -1697,30 +1718,35 @@ function drawRhythmHighway(now) {
     }
     ctx.beginPath();
     ctx.roundRect(x, top, w, h, 8);
-    ctx.fillStyle = isLead ? color : hexToRgba(color, 0.55);
+    ctx.fillStyle = isLead || played ? color : hexToRgba(color, 0.62);
     ctx.fill();
     ctx.lineWidth = isLead ? 3 : 1.2;
     ctx.strokeStyle = isLead ? "#ffffff" : hexToRgba(color, 0.95);
     ctx.stroke();
 
-    // 音名（大きく）と指番号
-    ctx.fillStyle = isLead ? "#0b0d12" : "#ffffff";
+    // 音名（指番号は出さない）。低いオクターブの音は音名の下に点を付ける
+    ctx.fillStyle = isLead || played ? textColorOn(color) : "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     const fs = Math.max(14, Math.min(26, laneW * 0.32));
-    ctx.font = `bold ${fs}px "Hiragino Sans", "Noto Sans JP", sans-serif`;
+    const low = isLowOctave(n);
+    const dotRoom = low ? fs * 0.32 : 0;
+    ctx.font = `bold ${n.note.length > 1 ? fs * 0.8 : fs}px "Hiragino Sans", "Noto Sans JP", sans-serif`;
     // 弾いた音で下端が帯からはみ出している場合も、見えている部分に音名を出す
-    const labelY = played ? Math.max(top + fs + 4, Math.min(yb - 14, zoneBottom - 10)) : yb - 14;
+    const baseY = yb - 14 - dotRoom;
+    const labelY = played ? Math.max(top + fs + 4, Math.min(baseY, zoneBottom - 10 - dotRoom)) : baseY;
     ctx.fillText(n.note, x + w / 2, labelY);
-    if (h > fs + 22) {
-      ctx.font = `bold ${Math.round(fs * 0.55)}px sans-serif`;
-      ctx.fillText(`${n.fingerNum}`, x + w / 2, top + fs * 0.7);
+    if (low) {
+      ctx.beginPath();
+      ctx.arc(x + w / 2, labelY + fs * 0.34, Math.max(2, fs * 0.12), 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   ctx.restore();
   ctx.globalAlpha = 1;
 
-  // 判定ラインと各指の受け口
+  // 判定ライン（白い線1本）と、各レーンから手のイラストの指先への細い線。
+  // 指番号（1〜5）とそれを入れていた枠は表示しない（レーンの位置・色と指先への線で伝わるため）
   ctx.strokeStyle = "rgba(255,255,255,0.85)";
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(left, hitY); ctx.lineTo(left + width, hitY); ctx.stroke();
@@ -1728,23 +1754,10 @@ function drawRhythmHighway(now) {
     const cx = playLayout.lanes[k];
     const active = k === currentFingerKey;
     const color = LANE_COLORS[k];
-    // 受け口から手のイラストの指先へ細い線
     const tip = getGuideFingerScreenPos(k);
-    ctx.strokeStyle = hexToRgba(color, active ? 0.7 : 0.18);
+    ctx.strokeStyle = hexToRgba(color, active ? 0.75 : 0.2);
     ctx.lineWidth = active ? 2 : 1;
-    ctx.beginPath(); ctx.moveTo(cx, hitY + 10); ctx.lineTo(tip.x, tip.y); ctx.stroke();
-    ctx.beginPath();
-    ctx.roundRect(cx - 15, hitY - 9, 30, 18, 9);
-    ctx.fillStyle = active ? color : "rgba(20,22,28,0.9)";
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = color;
-    ctx.stroke();
-    ctx.fillStyle = active ? "#0b0d12" : color;
-    ctx.font = "bold 12px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(`${FINGER_CONFIGS[k].fingerNum}`, cx, hitY + 0.5);
+    ctx.beginPath(); ctx.moveTo(cx, hitY + 2); ctx.lineTo(tip.x, tip.y); ctx.stroke();
   });
 }
 

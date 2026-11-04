@@ -307,9 +307,10 @@ html, body {
 }
 
 .hand-finger.active .finger-path {
-  fill: #00E5FF;
+  /* 光る指はノーツ（レーン）と同じ色。色は main.js の updateHandGuideWidget が --active-finger-color に設定 */
+  fill: var(--active-finger-color, #00E5FF);
   stroke: none;
-  filter: drop-shadow(0 0 6px #00E5FF) drop-shadow(0 0 16px rgba(0, 229, 255, 0.9));
+  filter: drop-shadow(0 0 6px var(--active-finger-color, #00E5FF)) drop-shadow(0 0 14px var(--active-finger-color, #00E5FF));
 }
 
 /* 打鍵時の一瞬のポップフィードバック */
