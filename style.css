@@ -1010,7 +1010,7 @@ body.play-mode .hand-guide-widget {
   padding: 4px 6px;
   background: rgba(200, 50, 60, 0.85);
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   z-index: 6;
 }
@@ -1031,4 +1031,72 @@ body.positioning .hand-guide-widget {
     transform: none;
     top: calc(22px + env(safe-area-inset-top, 0px));
   }
+}
+
+/* 演奏中の小窓：最初に合わせた手の位置（点線＋手のイラスト）と今の手の位置 */
+.pip-guide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+.pip-guide .pip-ref {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1.5px;
+  stroke-dasharray: 5 3;
+  vector-effect: non-scaling-stroke;
+}
+.pip-guide .pip-ref-hand rect {
+  fill: rgba(254, 220, 189, 0.38);
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.pip-guide .pip-now {
+  fill: none;
+  stroke: #3ddc84;
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+.pip-guide.bad .pip-now {
+  stroke: #f0626c;
+}
+
+/* 進捗バッジ：曲名（とセクション）を小さく添える */
+.song-progress-badge .badge-song {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: #aaaaaa;
+  margin-right: 8px;
+}
+
+/* 演奏中、手がずれたときに画面中央に出す大きな矢印 */
+.drift-badge {
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  z-index: 260;
+  padding: 14px 22px 16px;
+  border-radius: 20px;
+  background: rgba(10, 12, 16, 0.82);
+  border: 2px solid #ffd23f;
+  animation: drift-blink 1s ease-in-out infinite;
+}
+.drift-badge .dir-icon {
+  width: clamp(120px, 32vmin, 230px) !important;
+  height: clamp(120px, 32vmin, 230px) !important;
+}
+.drift-badge[hidden] {
+  display: none;
+}
+@keyframes drift-blink {
+  50% { transform: translate(-50%, -50%) scale(0.94); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drift-badge { animation: none; }
 }

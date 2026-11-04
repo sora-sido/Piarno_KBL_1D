@@ -17,7 +17,7 @@
 export const TARGET_BOX = { x: 0.14, y: 0.24, w: 0.72, h: 0.56 };
 export const DESK_LINE_Y = 0.80; // 机の線（枠の下辺）
 const CENTER_TOL_X = 0.12;     // 手の中心と枠の中心の許容ずれ（横）
-const CENTER_TOL_Y = 0.14;     // 同（縦）
+const CENTER_TOL_Y = 0.20;     // 同（縦）。机に手を置いたままでも合うよう広めにとる
 const SIZE_MIN = 0.38;         // 手の横幅が画面の幅に占める割合の下限
 const SIZE_MAX = 0.80;         // 同・上限
 const EDGE_MARGIN = 0.02;      // 指先が画面の端からはみ出していないかの余白
@@ -28,8 +28,40 @@ const state = {
   onDone: null,
   goodSince: null,
   lastResult: null,
-  el: null
+  el: null,
+  reference: null   // 位置合わせが終わった時点の手の範囲（演奏中のずれの基準）
 };
+
+// 演奏中、最初の位置からどれだけずれたら知らせるか
+const DRIFT_TOL_X = 0.08;
+const DRIFT_TOL_Y = 0.09;
+const DRIFT_SCALE = 0.22;   // 手の横幅が最初より±22%以上変わったら（近づいた／離れた）
+
+export function getReferenceBox() {
+  return state.reference;
+}
+
+/**
+ * 演奏中：位置合わせで決めた最初の手の位置からのずれを評価する
+ */
+export function evaluateDrift(landmarks) {
+  const ref = state.reference;
+  const base = evaluateHandPosition(landmarks);
+  if (!ref || !base.box) return { ...base, ref };
+  const b = base.box;
+  const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+  const rcx = (ref.minX + ref.maxX) / 2, rcy = (ref.minY + ref.maxY) / 2;
+  const scale = (b.maxX - b.minX) / Math.max(0.01, ref.maxX - ref.minX);
+  let code = "ok", message = "最初の位置のままです", dir = null;
+  if (scale > 1 + DRIFT_SCALE) { code = "closer"; dir = "away"; message = "最初よりカメラに近づいています。少し離してください"; }
+  else if (scale < 1 - DRIFT_SCALE) { code = "farther"; dir = "closer"; message = "最初よりカメラから離れています。少し近づけてください"; }
+  else if (cx - rcx > DRIFT_TOL_X) { code = "right"; dir = "left"; message = "最初の位置より右にずれています。手を左へ戻してください"; }
+  else if (rcx - cx > DRIFT_TOL_X) { code = "left"; dir = "right"; message = "最初の位置より左にずれています。手を右へ戻してください"; }
+  else if (cy - rcy > DRIFT_TOL_Y) { code = "down"; dir = "up"; message = "最初の位置より下にずれています。手を少し上へ"; }
+  else if (rcy - cy > DRIFT_TOL_Y) { code = "up"; dir = "down"; message = "最初の位置より上にずれています。手を少し下へ"; }
+  else if (!base.checks.visible) { code = "edge"; dir = "center"; message = "指先が画面の端で切れています"; }
+  return { ok: code === "ok", code, dir, message, box: b, ref };
+}
 
 /**
  * 手の位置を評価する（演奏中の小窓の枠の色にも使う）
@@ -37,7 +69,7 @@ const state = {
  */
 export function evaluateHandPosition(landmarks) {
   if (!landmarks) {
-    return { ok: false, code: "nohand", message: "右手が見えていません。カメラに右手の甲を向けて、枠の中に入れてください" };
+    return { ok: false, code: "nohand", dir: "nohand", message: "右手が見えていません。カメラに右手の甲を向けて、枠の中に入れてください" };
   }
   const xs = landmarks.map((p) => 1 - p.x);
   const ys = landmarks.map((p) => p.y);
@@ -51,13 +83,43 @@ export function evaluateHandPosition(landmarks) {
     centerY: Math.abs(cy - boxCy) <= CENTER_TOL_Y,
     size: width >= SIZE_MIN && width <= SIZE_MAX
   };
-  let code = "ok", message = "良い位置です。そのまま止めてください";
-  if (width > SIZE_MAX) { code = "tooBig"; message = "手がカメラに近すぎます。少し離してください"; }
-  else if (width < SIZE_MIN) { code = "tooSmall"; message = "手が小さく写っています。もう少しカメラに近づけてください"; }
-  else if (!checks.centerX) { code = "x"; message = cx < boxCx ? "手をもう少し右へ動かしてください" : "手をもう少し左へ動かしてください"; }
-  else if (!checks.centerY) { code = "y"; message = cy < boxCy ? "手をもう少し下へ動かしてください" : "手をもう少し上へ動かしてください"; }
-  else if (!checks.visible) { code = "edge"; message = "指先が画面の端で切れています。手を枠の中央へ"; }
-  return { ok: code === "ok", code, message, checks, box: { minX, maxX, minY, maxY } };
+  let code = "ok", message = "良い位置です。そのまま止めてください", dir = null;
+  if (width > SIZE_MAX) { code = "tooBig"; dir = "away"; message = "手がカメラに近すぎます。少し離してください"; }
+  else if (width < SIZE_MIN) { code = "tooSmall"; dir = "closer"; message = "手が小さく写っています。もう少しカメラに近づけてください"; }
+  else if (!checks.centerX) { code = "x"; dir = cx < boxCx ? "right" : "left"; message = cx < boxCx ? "手をもう少し右へ動かしてください" : "手をもう少し左へ動かしてください"; }
+  else if (!checks.centerY) { code = "y"; dir = cy < boxCy ? "down" : "up"; message = cy < boxCy ? "手をもう少し下へ動かしてください" : "手をもう少し上へ動かしてください"; }
+  else if (!checks.visible) { code = "edge"; dir = "center"; message = "指先が画面の端で切れています。手を枠の中央へ"; }
+  return { ok: code === "ok", code, dir, message, checks, box: { minX, maxX, minY, maxY } };
+}
+
+/**
+ * 動かす方向を大きな矢印で表す（位置合わせ画面と演奏中の両方で使う）
+ * dir: left / right / up / down / closer / away / center / nohand / ok
+ */
+const DIR_LABEL = {
+  left: "左へ", right: "右へ", up: "上へ", down: "下へ",
+  closer: "カメラに近づける", away: "カメラから離す", center: "枠の中央へ", nohand: "右手を映す", ok: "OK"
+};
+export function directionGraphic(dir) {
+  const arrow = (rot) => `<svg viewBox="0 0 100 100" aria-hidden="true"><g transform="rotate(${rot} 50 50)">
+      <path d="M50 8 L88 50 L64 50 L64 92 L36 92 L36 50 L12 50 Z" fill="currentColor"/></g></svg>`;
+  const corners = (outward) => {
+    const tri = (rot) => `<g transform="rotate(${rot} 50 50)"><path d="${outward ? "M6 6 L40 6 L6 40 Z" : "M40 40 L40 12 L12 40 Z"}" fill="currentColor"/></g>`;
+    return `<svg viewBox="0 0 100 100" aria-hidden="true">${tri(0)}${tri(90)}${tri(180)}${tri(270)}
+      <rect x="34" y="34" width="32" height="32" rx="6" fill="none" stroke="currentColor" stroke-width="6"/></svg>`;
+  };
+  let svg;
+  switch (dir) {
+    case "up": svg = arrow(0); break;
+    case "right": svg = arrow(90); break;
+    case "down": svg = arrow(180); break;
+    case "left": svg = arrow(270); break;
+    case "closer": svg = corners(true); break;
+    case "away": svg = corners(false); break;
+    case "ok": svg = `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M18 52 L42 76 L84 26" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`; break;
+    default: svg = `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" stroke-width="10"/><circle cx="50" cy="50" r="8" fill="currentColor"/></svg>`;
+  }
+  return `<div class="dir-icon">${svg}</div><div class="dir-label">${DIR_LABEL[dir] || ""}</div>`;
 }
 
 export function isPositioning() {
@@ -94,6 +156,9 @@ export function startPositioning(container, onDone) {
       <rect x="72" y="18" width="11" height="34" rx="5.5"/>
     </svg>
     </svg>`;
+  const dirEl = document.createElement("div");
+  dirEl.className = "dir-badge pos-dir";
+  el.appendChild(dirEl);
   container.appendChild(el);
 
   const panel = document.createElement("div");
@@ -102,13 +167,14 @@ export function startPositioning(container, onDone) {
   panel.innerHTML = `
     <div class="pos-title">右手の位置合わせ</div>
     <div class="pos-msg" id="pos-msg">右手を点線の枠に合わせてください</div>
-    <div class="pos-hint">スマホを手の正面・机の高さに立て、指先が下の線（机）に届くように構えます</div>
+    <div class="pos-hint">スマホを手の正面・机の高さに立て、<b>手は机に置いたまま</b>（浮かせずに）、濃い手のイラストに重ねてください。指先が下の線（机）に乗るのが目安です</div>
     <ul class="pos-checks">
       <li data-k="hand">手が見えている</li>
       <li data-k="pos">枠の位置</li>
       <li data-k="size">大きさ</li>
       <li data-k="edge">指先まで写っている</li>
     </ul>
+    <div class="pos-rule">演奏中は、ここで合わせた位置から<b>手を動かさずに</b>弾いてください。ずれたら画面に矢印が出ます</div>
     <div class="pos-bar"><span id="pos-bar-fill"></span></div>
     <div class="pos-actions">
       <button type="button" class="pos-btn" id="pos-skip">この位置で始める</button>
@@ -145,6 +211,13 @@ export function updatePositioning(landmarks) {
     handRect.style.display = "none";
   }
   state.el.classList.toggle("good", r.ok);
+  const dirEl = state.el.querySelector(".pos-dir");
+  const dir = r.ok ? "ok" : r.dir;
+  if (dirEl.dataset.dir !== dir) {
+    dirEl.dataset.dir = dir;
+    dirEl.innerHTML = directionGraphic(dir);
+    dirEl.classList.toggle("ok", r.ok);
+  }
 
   const now = performance.now();
   if (r.ok) {
@@ -152,7 +225,7 @@ export function updatePositioning(landmarks) {
     const p = Math.min(1, (now - state.goodSince) / HOLD_MS);
     panel.querySelector("#pos-bar-fill").style.width = `${p * 100}%`;
     if (p >= 1) {
-      panel.querySelector("#pos-msg").textContent = "OK！この位置で判定します";
+      panel.querySelector("#pos-msg").textContent = "OK！この位置で判定します。演奏中は手をここから動かさないでください";
       finish();
     }
   } else {
@@ -164,6 +237,10 @@ export function updatePositioning(landmarks) {
 function finish() {
   if (!state.active) return;
   state.active = false;
+  // この時点の手の位置を、演奏中のずれの基準として覚える（手が見えていなければ目標の枠を基準に）
+  state.reference = state.lastResult && state.lastResult.box ? { ...state.lastResult.box } : {
+    minX: TARGET_BOX.x, maxX: TARGET_BOX.x + TARGET_BOX.w, minY: TARGET_BOX.y, maxY: TARGET_BOX.y + TARGET_BOX.h
+  };
   document.body.classList.remove("positioning");
   const el = state.el, panel = state.panel;
   state.el = null;
@@ -184,15 +261,27 @@ function injectStyles() {
   .pos-overlay.good .pos-box { stroke: #3ddc84; stroke-dasharray: none; }
   .pos-hand { fill: rgba(0,229,255,.08); stroke: #00e5ff; stroke-width: 2px; vector-effect: non-scaling-stroke; }
   .pos-overlay.good .pos-hand { stroke: #3ddc84; fill: rgba(61,220,132,.10); }
-  .pos-silhouette { position: absolute; opacity: .13; }
-  .pos-silhouette rect { fill: #FEDCBD; }
+  .pos-silhouette { position: absolute; opacity: .62; }
+  .pos-silhouette rect { fill: rgba(254,220,189,.55); stroke: #ffffff; stroke-width: 1.6px; vector-effect: non-scaling-stroke; }
+  .pos-overlay.good .pos-silhouette rect { fill: rgba(61,220,132,.45); stroke: #3ddc84; }
   .pos-desk { stroke: rgba(255,255,255,.55); stroke-width: 2px; vector-effect: non-scaling-stroke; }
   .pos-hint { font-size: 12px; color: #9aa4b4; line-height: 1.5; }
-  .pos-overlay.good .pos-silhouette { opacity: .12; }
+  .pos-overlay.good .pos-silhouette { opacity: .75; }
+  .pos-hint b { color: #fff; }
   .pos-panel { position: fixed; left: 50%; transform: translateX(-50%); top: calc(56px + env(safe-area-inset-top, 0px));
     width: min(520px, calc(100vw - 24px)); background: rgba(12,14,18,.88); color: #fff; border: 1px solid #333; border-radius: 12px;
     padding: 10px 14px; z-index: 500; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 12px; font-size: 14px; align-items: center; }
-  .pos-panel > .pos-title, .pos-panel > .pos-hint, .pos-panel > .pos-checks, .pos-panel > .pos-bar { grid-column: 1 / -1; }
+  .pos-panel > .pos-title, .pos-panel > .pos-hint, .pos-panel > .pos-checks, .pos-panel > .pos-bar, .pos-panel > .pos-rule { grid-column: 1 / -1; }
+  .pos-rule { font-size: 13px; line-height: 1.5; color: #ffd23f; }
+  .pos-rule b { color: #fff; }
+  .dir-badge { display: grid; justify-items: center; gap: 4px; color: #ffd23f; pointer-events: none;
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,.7)); }
+  .dir-badge.ok { color: #3ddc84; }
+  .dir-badge .dir-icon { width: clamp(90px, 22vmin, 170px); height: clamp(90px, 22vmin, 170px); }
+  .dir-badge .dir-icon svg { width: 100%; height: 100%; display: block; }
+  .dir-badge .dir-label { font-size: clamp(16px, 3.2vmin, 28px); font-weight: 800; color: #fff; background: rgba(0,0,0,.55);
+    padding: 2px 12px; border-radius: 999px; white-space: nowrap; }
+  .pos-dir { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; }
   @media (max-height: 500px) { .pos-panel { left: 12px; transform: none; width: min(360px, 45vw); } .pos-hint { display: none; } }
   .pos-title { font-weight: 700; font-size: 15px; }
   .pos-msg { font-size: 15px; line-height: 1.45; min-width: 0; }

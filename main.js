@@ -9,7 +9,7 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
 import { setupRecordButton, onPlayStart, onHit as onRecordHit, recordFrame, isRecording } from "./recorder.js";
-import { startPositioning, updatePositioning, isPositioning, evaluateHandPosition } from "./positioning.js";
+import { startPositioning, updatePositioning, isPositioning, evaluateDrift, directionGraphic } from "./positioning.js";
 
 // 打鍵→発音の遅延対策：Tone.js は時刻未指定の発音を既定で lookAhead（0.1秒）後に予約するため、
 // 0 にして打鍵判定と同じ瞬間に鳴らす（リアルタイム演奏用。シーケンス再生はしないので先読みは不要）
@@ -937,19 +937,42 @@ export function beginPositioning(onStart) {
   });
 }
 
-// 演奏中：小窓のカメラの枠の色で、手が位置合わせの枠から外れていないかを知らせる
+// 演奏中：小窓のカメラに「最初に合わせた手の位置」（点線＋手のイラスト）と今の手の位置を重ね、
+// ずれたら枠の色と文字で知らせる
 let pipStatusFrame = 0;
 let pipBadSince = null;
+const PIP_SILHOUETTE = `<rect x="14" y="6" width="74" height="16" rx="8"/><rect x="8" y="18" width="12" height="30" rx="6" transform="rotate(-18 14 18)"/><rect x="27" y="16" width="12" height="40" rx="6"/><rect x="42" y="14" width="12" height="44" rx="6"/><rect x="57" y="16" width="12" height="41" rx="6"/><rect x="72" y="18" width="11" height="34" rx="5.5"/>`;
 function updatePipStatus(landmarks) {
-  if (++pipStatusFrame % 6 !== 0) return;
+  if (++pipStatusFrame % 3 !== 0) return;
   const vc = document.querySelector(".video-container");
   if (!vc) return;
-  const r = evaluateHandPosition(landmarks);
+  const r = evaluateDrift(landmarks);
   const now = performance.now();
   if (r.ok) pipBadSince = null;
   else if (pipBadSince === null) pipBadSince = now;
-  const bad = pipBadSince !== null && now - pipBadSince > 1200;
-  vc.style.setProperty("--pip-border", r.ok ? "rgba(61,220,132,0.85)" : bad ? "rgba(240,98,108,0.95)" : "rgba(255,255,255,0.35)");
+  const bad = pipBadSince !== null && now - pipBadSince > 600;
+  vc.style.setProperty("--pip-border", r.ok ? "rgba(61,220,132,0.9)" : bad ? "rgba(240,98,108,0.95)" : "rgba(255,255,255,0.4)");
+
+  let guide = vc.querySelector(".pip-guide");
+  if (!guide) {
+    guide = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    guide.setAttribute("class", "pip-guide");
+    guide.setAttribute("viewBox", "0 0 100 100");
+    guide.setAttribute("preserveAspectRatio", "none");
+    guide.innerHTML = `<svg class="pip-ref-hand" viewBox="0 0 100 60" preserveAspectRatio="none">${PIP_SILHOUETTE}</svg>
+      <rect class="pip-ref" rx="2"/><rect class="pip-now" rx="2"/>`;
+    vc.appendChild(guide);
+  }
+  const setBox = (el, b) => {
+    if (!b) { el.setAttribute("width", 0); return; }
+    el.setAttribute("x", b.minX * 100); el.setAttribute("y", b.minY * 100);
+    el.setAttribute("width", (b.maxX - b.minX) * 100); el.setAttribute("height", (b.maxY - b.minY) * 100);
+  };
+  setBox(guide.querySelector(".pip-ref"), r.ref);
+  setBox(guide.querySelector(".pip-ref-hand"), r.ref);
+  setBox(guide.querySelector(".pip-now"), r.box);
+  guide.classList.toggle("bad", bad);
+
   let label = vc.querySelector(".pip-status");
   if (!label) {
     label = document.createElement("div");
@@ -958,6 +981,22 @@ function updatePipStatus(landmarks) {
   }
   label.textContent = bad ? r.message : "";
   label.hidden = !bad;
+
+  // 画面中央に大きな矢印（どちらへ戻せばよいか）
+  let big = document.getElementById("drift-badge");
+  if (!big) {
+    big = document.createElement("div");
+    big.id = "drift-badge";
+    big.className = "dir-badge drift-badge";
+    big.setAttribute("role", "status");
+    document.body.appendChild(big);
+  }
+  const dir = bad ? r.dir : null;
+  if (big.dataset.dir !== String(dir)) {
+    big.dataset.dir = String(dir);
+    big.innerHTML = dir ? directionGraphic(dir) : "";
+  }
+  big.hidden = !dir;
 }
 
 /**
@@ -1272,7 +1311,12 @@ export function renderSongGuideUI() {
   }
   // 画面上部：ミニマル進捗バッジ（白黒ミニマル）
   if (songProgressBadge) {
-    songProgressBadge.textContent = `${currentItem.step} / ${currentSequence.length}`;
+    const song = SONGS[currentSongId];
+    const section = currentSongId === "shin_takarajima" && SHIN_TAKARAJIMA_SECTIONS[currentItem.phrase - 1]
+      ? `・${SHIN_TAKARAJIMA_SECTIONS[currentItem.phrase - 1][0]}` : "";
+    songProgressBadge.innerHTML = `<span class="badge-song"></span><span class="badge-count"></span>`;
+    songProgressBadge.querySelector(".badge-song").textContent = `${song ? song.title : ""}${section}`;
+    songProgressBadge.querySelector(".badge-count").textContent = `${currentItem.step} / ${currentSequence.length}`;
   }
 }
 
@@ -1448,7 +1492,7 @@ function layoutPlayView() {
   const aspect = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--video-aspect")) || 4 / 3;
 
   // カメラの小窓（左下）
-  const pipW = Math.round(Math.min(W * 0.3, 260, H * 0.22 * aspect));
+  const pipW = Math.round(Math.min(W * 0.42, 380, H * 0.30 * aspect));
   const pipH = Math.round(pipW / aspect);
   const pipLeft = 12, pipTop = H - pipH - 12;
   if (vc) {
