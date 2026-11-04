@@ -1,0 +1,416 @@
+<title>Piarno ノーツデザイン</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: 上で「ノーツが伝えること」と現状の課題 → 中央に「今」と「検討中」のプレビューを並べ、横に切り替えパネル → 下に配色の検証表と提案。プレビューはアプリと同じ黒い演奏画面 */
+:root {
+  --page: #eef0f3; --canvas: #ffffff; --ink: #1b2330; --muted: #5d6676; --faint: #d9dde3; --soft: #f3f4f7;
+  --accent: #0f8fa6; --ok: #1e8e5a; --warn: #b26b00; --ng: #c8323c;
+  --stage: #0a0a0a;
+  --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0f1319; --canvas: #171c24; --ink: #e8ecf2; --muted: #9aa4b4; --faint: #2c3440; --soft: #212834;
+    --accent: #3cc6dd; --ok: #45c08a; --warn: #e0a33a; --ng: #f0626c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0f1319; --canvas: #171c24; --ink: #e8ecf2; --muted: #9aa4b4; --faint: #2c3440; --soft: #212834;
+  --accent: #3cc6dd; --ok: #45c08a; --warn: #e0a33a; --ng: #f0626c; color-scheme: dark;
+}
+body { background: var(--page); color: var(--ink); font-family: var(--font-body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.sheet { background: var(--canvas); border-radius: 4px; padding: clamp(16px, 2.6vw, 30px); display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
+.sheet > * { min-width: 0; }
+h1 { margin: 0; font-size: clamp(1.35rem, 2.4vw, 1.75rem); font-weight: 600; text-wrap: balance; }
+h2 { margin: 0 0 10px; font-size: 1.08rem; font-weight: 600; }
+.lead { margin: 6px 0 0; color: var(--muted); font-size: .93rem; line-height: 1.7; max-width: 72ch; }
+.note { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.6; }
+
+/* jobs */
+.jobs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.job { border: 1px solid var(--faint); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.job .q { font-size: .76rem; color: var(--muted); letter-spacing: .04em; }
+.job b { font-size: .95rem; }
+.job p { margin: 0; font-size: .84rem; line-height: 1.6; color: var(--muted); }
+.job .st { font-size: .76rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; justify-self: start; }
+.st.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.st.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.st.ng { background: color-mix(in srgb, var(--ng) 14%, transparent); color: var(--ng); }
+
+/* studio: previews + controls */
+.studio { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+.pv { display: grid; gap: 8px; min-width: 0; }
+.pv h3 { margin: 0; font-size: .9rem; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+.pv h3 span { color: var(--muted); font-weight: 400; font-size: .78rem; }
+.phone { background: var(--stage); border-radius: 22px; padding: 10px; aspect-ratio: 9 / 15; max-width: 100%; box-shadow: 0 0 0 1px var(--faint); }
+.phone canvas { width: 100%; height: 100%; display: block; border-radius: 14px; }
+.panel { border: 1px solid var(--faint); border-radius: 8px; padding: 14px; display: grid; gap: 14px; }
+.ctl { display: grid; gap: 6px; }
+.ctl > span { font-size: .78rem; color: var(--muted); }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button { font: inherit; font-size: .8rem; padding: 6px 9px; border-radius: 6px; border: 1px solid var(--faint); background: transparent; color: var(--ink); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--canvas); border-color: var(--ink); }
+.seg button:focus-visible, .play:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.play { font: inherit; font-size: .85rem; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+.desc { font-size: .8rem; color: var(--muted); line-height: 1.6; margin: 0; }
+
+/* palette check */
+.scroll { overflow-x: auto; }
+table.pal { border-collapse: collapse; font-size: .84rem; width: 100%; min-width: 640px; }
+.pal th, .pal td { padding: 8px 10px; border-bottom: 1px solid var(--faint); text-align: left; vertical-align: middle; }
+.pal th { font-weight: 500; color: var(--muted); font-size: .76rem; }
+.sw { display: inline-grid; place-items: center; width: 54px; height: 26px; border-radius: 6px; font-weight: 700; font-size: .85rem; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.pairs { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .82rem; margin-top: 8px; }
+.pairs b { font-weight: 600; }
+
+/* proposal */
+.prop { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 28px; }
+.prop div { min-width: 0; }
+.prop h3 { margin: 0 0 4px; font-size: .95rem; }
+.prop p { margin: 0; font-size: .86rem; line-height: 1.7; color: var(--muted); }
+.qs { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: .88rem; line-height: 1.6; }
+
+@media (max-width: 1080px) { .studio { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .panel { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .jobs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .prop { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .studio { grid-template-columns: minmax(0, 1fr); } .jobs { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<div class="wrap">
+  <div class="sheet">
+    <header>
+      <h1>Piarno ノーツデザイン</h1>
+      <p class="lead">落ちてくるノーツが、演奏者に何をどの順番で伝えるべきかを整理し、色・形・文字の選択肢を実際の演奏画面で比べるページです。右のパネルで切り替えると「検討中」のプレビューが変わります。曲は新宝島の前奏〜Aメロ（♩=90 にゆっくりして再生）です。</p>
+    </header>
+
+    <section>
+      <h2>ノーツが伝える4つのこと</h2>
+      <div class="jobs">
+        <div class="job"><span class="q">どの指で？</span><b>レーンの位置</b><p>左から親指〜小指。手のイラストの指先と線でつないでいる。色も指ごとに変えているので、位置と色の両方で同じことを伝えている。</p><span class="st warn">色が位置と重複</span></div>
+        <div class="job"><span class="q">何の音？</span><b>ノーツの中の音名</b><p>「ソ」は高いソ（G5）と低いソ（G4）の両方があり、今は見分けがつかない。新宝島では親指が低いソ、小指が高いソを弾く。</p><span class="st ng">高い／低いが不明</span></div>
+        <div class="job"><span class="q">いつ？</span><b>縦の間隔と長さ</b><p>ノーツの間隔が時間、長さが音の長さ。ただし長いノーツは「どこで叩くか」（下端）より「長さ」が目立ちやすい。</p><span class="st warn">叩く点が弱い</span></div>
+        <div class="job"><span class="q">今どれ？</span><b>状態（次・この先・弾いた）</b><p>次の音は白枠と縁取りで強調。この先の音は半透明、弾いた音は判定ラインの下で薄く残る。</p><span class="st ok">おおむね良い</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>見比べる</h2>
+      <div class="studio">
+        <div class="pv"><h3>今のデザイン<span>アプリの現状</span></h3><div class="phone"><canvas id="cv-now" aria-label="今のデザインのプレビュー"></canvas></div></div>
+        <div class="pv"><h3>検討中<span id="pv-caption">右のパネルで切り替え</span></h3><div class="phone"><canvas id="cv-try" aria-label="検討中のデザインのプレビュー"></canvas></div></div>
+        <div class="panel" id="panel">
+          <div class="ctl"><span>色が表すもの</span><div class="seg" data-k="color">
+            <button type="button" data-v="finger">指ごと</button>
+            <button type="button" data-v="pitch">音の高さごと</button>
+            <button type="button" data-v="focus">次の音だけ色</button></div></div>
+          <div class="ctl" id="ctl-palette"><span>指ごとの配色</span><div class="seg" data-k="palette">
+            <button type="button" data-v="current">今の配色</button>
+            <button type="button" data-v="cud">色覚に配慮</button></div></div>
+          <div class="ctl"><span>形</span><div class="seg" data-k="shape">
+            <button type="button" data-v="bar">長方形</button>
+            <button type="button" data-v="head">頭＋しっぽ</button>
+            <button type="button" data-v="chip">頭だけ</button></div></div>
+          <div class="ctl"><span>ノーツの文字</span><div class="seg" data-k="label">
+            <button type="button" data-v="name">音名</button>
+            <button type="button" data-v="namefinger">音名＋指番号</button>
+            <button type="button" data-v="finger">指番号</button></div></div>
+          <div class="ctl"><span>高い音・低い音</span><div class="seg" data-k="octave">
+            <button type="button" data-v="off">区別しない</button>
+            <button type="button" data-v="dot">点で区別</button></div></div>
+          <div class="ctl"><span>手のイラストの指</span><div class="seg" data-k="hand">
+            <button type="button" data-v="cyan">水色で光る</button>
+            <button type="button" data-v="match">ノーツと同じ色</button></div></div>
+          <p class="desc" id="desc"></p>
+          <button type="button" class="play" id="play">一時停止</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>配色の検証</h2>
+      <p class="note">「検討中」の配色について、ノーツの上の文字の読みやすさ（コントラスト比。4.5:1以上なら小さな文字でも読みやすい）と、赤・緑の区別がつきにくい色覚（2型・1型、日本人男性の約20人に1人）での見え方の目安を示します。</p>
+      <div class="scroll"><table class="pal" id="pal"></table></div>
+      <div class="pairs" id="pairs"></div>
+    </section>
+
+    <section>
+      <h2>提案</h2>
+      <div class="prop">
+        <div><h3>1. 色は「指」に使い、手のイラストも同じ色にする</h3><p>演奏中にいちばん大事なのは「どの指を動かすか」です。ノーツの色と、手のイラストの指の色を揃えると、ノーツを見た瞬間に指が決まります。今は手のイラストの指がすべて水色で光るため、色の対応が途切れています。音の高さごとの色は音を覚える助けになりますが、新宝島のように同じ指で違う音（親指でソとド）を弾く曲では、色と指が食い違って迷いやすくなります。</p></div>
+        <div><h3>2. 配色を、色覚に配慮したものに替える</h3><p>今の配色は、2型色覚では薬指（青）と小指（紫）がほぼ同じ色に見え、隣り合うレーンで区別できません。橙・水色・黄・赤紫・青緑の組み合わせ（色覚に配慮した配色として広く使われる系統）なら、隣どうしが明るさでも区別できます。</p></div>
+        <div><h3>3. 形は「頭＋しっぽ」にして、叩く点をはっきりさせる</h3><p>叩くタイミングはノーツの下端です。長い音ほど長方形が大きく目立ち、叩く点がぼやけます。下端に音名入りの「頭」を置き、長さは細い「しっぽ」で示すと、叩く点と音の長さの両方が読み取れます。</p></div>
+        <div><h3>4. 高い音・低い音を点で区別する</h3><p>楽譜の数字譜と同じく、低いオクターブの音名の下に点を付けます（低いソ＝「ソ」の下に点）。新宝島では親指の低いソと小指の高いソが交互に出てくるので、区別があると迷いません。</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>決めてほしいこと</h2>
+      <ol class="qs">
+        <li>色に担わせるのは「指」か「音の高さ」か（提案は「指」）。</li>
+        <li>ノーツの形（提案は「頭＋しっぽ」）。</li>
+        <li>ノーツの文字は「音名」だけでよいか、指番号も入れるか。</li>
+        <li>手のイラストの指を、ノーツと同じ色にするか。</li>
+      </ol>
+      <p class="note" style="margin-top:10px">決まったら、その組み合わせをアプリに反映します。プレビューの描き方はアプリの演奏画面と同じ寸法・同じ順番で描いています。</p>
+    </section>
+  </div>
+</div>
+
+<script>
+/* ---------- 曲：新宝島 前奏〜Aメロ冒頭（アプリと同じ表記："音:指:次の音まで:長さ"、8分音符=1） ---------- */
+const NOTE_INFO = { F4: ["ファ", "F", 3], G4: ["ソ", "G", 3], A4: ["ラ", "A", 3], Bb4: ["シ♭", "B♭", 3], C5: ["ド", "C", 4], D5: ["レ", "D", 4], F5: ["ファ", "F", 4], G5: ["ソ", "G", 4] };
+const PARTS = [
+  "G5:5:8 F5:4:4 D5:2:2 C5:1:4 Bb4:2:2 G4:1:10 F4:1:2 G4:1:4 Bb4:1:4 C5:2:4",
+  "Bb4:1:2 C5:2:4 D5:3:2 Bb4:1:4", "F5:4:2 D5:2:2 F5:4:2 D5:2:2 G5:5:16 F5:4:16",
+  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 F5:4:2:1 D5:2:2:1 C5:1:2:1 D5:2:2:1 D5:2:1",
+  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G5:5:2:1 D5:2:2:1 C5:1:2:1 D5:2:2:1 D5:2:1",
+  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 F5:4:2:1 D5:2:2:1 C5:1:2:1 D5:2:2:1 D5:2:1",
+  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G5:5:2:1 D5:2:2:1 C5:1:2:1 F5:4:2:1 F5:4:1"
+];
+const FK = ["THUMB", "INDEX", "MIDDLE", "RING", "PINKY"];
+const SEQ = [];
+let onset = 0;
+PARTS.join(" ").split(/\s+/).forEach((tok) => {
+  const [n, f, ioi, dur] = tok.split(":");
+  const [name, abc, oct] = NOTE_INFO[n];
+  SEQ.push({ n, name, abc, oct, finger: +f, fk: FK[+f - 1], onset, ioi: +ioi, dur: +(dur || ioi) });
+  onset += +ioi;
+});
+
+/* ---------- 配色 ---------- */
+const PALETTES = {
+  current: { THUMB: "#ff8a3d", INDEX: "#ffd23f", MIDDLE: "#3ddc84", RING: "#3db8ff", PINKY: "#c08cff" },
+  // 色覚に配慮した配色の系統（橙・水色・黄・赤紫・青緑）。隣り合うレーンで明るさも変える
+  cud:     { THUMB: "#E69F00", INDEX: "#56B4E9", MIDDLE: "#F0E442", RING: "#CC79A7", PINKY: "#00B386" }
+};
+// 音の高さごと（音楽教育で使われる虹色の対応：ド赤・レ橙・ミ黄・ファ緑・ソ青・ラ藍・シ紫）。低いオクターブは少し暗く
+const PITCH = { C: "#E8453C", D: "#F5922F", E: "#F2D23C", F: "#5BBF5A", G: "#3A8EE6", A: "#6A5CD6", "B♭": "#B04FC9" };
+const CYAN = "#00E5FF";
+
+const STATE_NOW = { color: "finger", palette: "current", shape: "bar", label: "namefinger", octave: "off", hand: "cyan" };
+const st = { color: "finger", palette: "cud", shape: "head", label: "name", octave: "dot", hand: "match" };
+
+function hexRgb(h) { const v = parseInt(h.slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+function rgba(h, a) { const [r, g, b] = hexRgb(h); return `rgba(${r},${g},${b},${a})`; }
+function shade(h, k) { const [r, g, b] = hexRgb(h); return `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`; }
+function lum(rgb) { const f = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }; const [r, g, b] = rgb.map(f); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+function contrast(a, b) { const la = lum(a), lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); }
+function textOn(hex) { return lum(hexRgb(hex)) > 0.3 ? "#0b0d12" : "#ffffff"; }
+
+function noteColor(o, nt) {
+  if (o.color === "pitch") {
+    const c = PITCH[nt.abc];
+    return nt.oct === 3 ? shade(c, 0.72) : c;
+  }
+  if (o.color === "focus") return null; // 次の音だけ色（下で処理）
+  return PALETTES[o.palette][nt.fk];
+}
+function laneColor(o, fk) {
+  if (o.color === "finger") return PALETTES[o.palette][fk];
+  return "#9aa4b4";
+}
+
+/* ---------- 描画（アプリの drawRhythmHighway と同じ寸法・順番） ---------- */
+function drawStage(cv, o, view, step) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return;
+  if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+  ctx.fillStyle = "#0a0a0a"; ctx.fillRect(0, 0, W, H);
+
+  const S = Math.min(H * 0.34, W * 0.62);
+  const handTop = H - 4 - S * 0.86;
+  const zone = Math.max(40, Math.min(90, S * 0.26));
+  const topY = 26, hitY = handTop + S * 0.08 - 20 - zone, zoneBottom = hitY + zone;
+  const left = 8, width = W - 16, laneW = width / 5;
+  const laneX = (fk) => left + laneW * (FK.indexOf(fk) + 0.5);
+  const ppe = Math.max(10, Math.min(40, (hitY - topY) / 18));
+  const yOf = (on) => hitY - (on - view) * ppe;
+  const lead = SEQ[step];
+
+  // レーン背景
+  FK.forEach((k, i) => {
+    ctx.fillStyle = k === lead.fk ? "rgba(255,255,255,0.08)" : (i % 2 ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.012)");
+    ctx.fillRect(left + laneW * i, topY, laneW, zoneBottom - topY);
+  });
+  // 小節線・拍線
+  for (let e = Math.ceil(view - 6); ; e++) {
+    const y = yOf(e); if (y < topY) break; if (y > zoneBottom) continue;
+    if (e % 8 === 0) { ctx.strokeStyle = "rgba(255,255,255,0.28)"; ctx.lineWidth = 1.2; }
+    else if (e % 2 === 0) { ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1; }
+    else continue;
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + width, y); ctx.stroke();
+  }
+
+  // ノーツ
+  ctx.save(); ctx.beginPath(); ctx.rect(left, topY, width, zoneBottom - topY); ctx.clip();
+  const fs = Math.max(12, Math.min(22, laneW * 0.32));
+  for (let i = Math.max(0, step - 8); i < SEQ.length; i++) {
+    const nt = SEQ[i], yb = yOf(nt.onset);
+    if (yb < topY) break;
+    const isLead = i === step, played = i < step;
+    const h = Math.max(30, nt.dur * ppe - 4);
+    const w = laneW - 8, x = laneX(nt.fk) - w / 2, top = yb - h;
+    if (played && top >= zoneBottom) continue;
+    let col = noteColor(o, nt);
+    if (o.color === "focus") col = isLead ? CYAN : "#5d6676";
+    ctx.globalAlpha = played ? 0.35 : 1;
+
+    const headH = Math.min(h, Math.max(30, fs + 14));
+    const fillA = isLead || played ? 1 : 0.62;
+    if (isLead) { ctx.beginPath(); ctx.roundRect(x - 4, (o.shape === "bar" ? top : yb - headH) - 4, w + 8, (o.shape === "bar" ? h : headH) + 8, 11); ctx.fillStyle = rgba(col.startsWith("#") ? col : "#ffffff", 0.3); ctx.fill(); }
+    if (o.shape === "bar") {
+      ctx.beginPath(); ctx.roundRect(x, top, w, h, 8);
+      ctx.fillStyle = col.startsWith("#") ? rgba(col, fillA) : col; ctx.fill();
+      ctx.lineWidth = isLead ? 3 : 1.2; ctx.strokeStyle = isLead ? "#fff" : (col.startsWith("#") ? col : "#fff"); ctx.stroke();
+    } else {
+      if (o.shape === "head" && h > headH + 4) {
+        const tw = Math.max(6, w * 0.26);
+        ctx.beginPath(); ctx.roundRect(x + (w - tw) / 2, top, tw, h - headH + 6, tw / 2);
+        ctx.fillStyle = col.startsWith("#") ? rgba(col, isLead ? 0.75 : 0.42) : col; ctx.fill();
+      }
+      ctx.beginPath(); ctx.roundRect(x, yb - headH, w, headH, 9);
+      ctx.fillStyle = col.startsWith("#") ? rgba(col, fillA) : col; ctx.fill();
+      ctx.lineWidth = isLead ? 3 : 1.2; ctx.strokeStyle = isLead ? "#fff" : (col.startsWith("#") ? col : "#fff"); ctx.stroke();
+    }
+    // 文字
+    const solid = col.startsWith("#") ? col : "#888888";
+    ctx.fillStyle = (isLead || played) ? textOn(solid) : "#ffffff";
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    const cx = x + w / 2, ty = yb - (o.shape === "bar" ? 12 : (headH - fs * 0.78) / 2 + 2);
+    let main = o.label === "finger" ? String(nt.finger) : nt.name;
+    ctx.font = `700 ${o.label === "finger" ? fs * 1.05 : (main.length > 1 ? fs * 0.8 : fs)}px "IBM Plex Sans JP", "Hiragino Sans", sans-serif`;
+    ctx.fillText(main, cx, ty);
+    if (o.octave === "dot" && o.label !== "finger" && nt.oct === 3) {
+      ctx.beginPath(); ctx.arc(cx, ty + 5, Math.max(2, fs * 0.13), 0, Math.PI * 2); ctx.fill();
+    }
+    if (o.label === "namefinger" && o.shape === "bar" && h > fs + 22) {
+      ctx.font = `700 ${Math.round(fs * 0.55)}px sans-serif`; ctx.fillText(String(nt.finger), cx, top + fs * 0.75);
+    } else if (o.label === "namefinger" && o.shape !== "bar") {
+      ctx.font = `700 ${Math.round(fs * 0.5)}px sans-serif`; ctx.textAlign = "right"; ctx.fillText(String(nt.finger), x + w - 5, yb - headH + fs * 0.55);
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+
+  // 判定ラインと受け口
+  ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(left, hitY); ctx.lineTo(left + width, hitY); ctx.stroke();
+  // 手（指先を簡略化：左から親指〜小指）
+  const tips = FK.map((k, i) => ({ k, x: W / 2 - S * 0.36 + S * [0, 0.2, 0.36, 0.52, 0.67][i], y: handTop + S * [0.52, 0.18, 0.12, 0.17, 0.26][i] }));
+  ctx.fillStyle = "#FEDCBD";
+  ctx.beginPath(); ctx.roundRect(W / 2 - S * 0.18, handTop + S * 0.4, S * 0.62, S * 0.6, S * 0.12); ctx.fill();
+  tips.forEach((t, i) => {
+    const active = t.k === lead.fk;
+    const fw = S * (i === 0 ? 0.1 : 0.085);
+    ctx.save(); ctx.translate(t.x, t.y); if (i === 0) ctx.rotate(-0.9);
+    ctx.beginPath(); ctx.roundRect(-fw / 2, 0, fw, S * (i === 0 ? 0.3 : 0.42), fw / 2);
+    let fc = "#FEDCBD";
+    if (active) fc = o.hand === "match" && o.color === "finger" ? PALETTES[o.palette][t.k] : CYAN;
+    else if (o.hand === "match" && o.color === "finger") fc = "#FEDCBD";
+    ctx.fillStyle = fc; ctx.fill(); ctx.restore();
+  });
+  FK.forEach((k) => {
+    const cx = laneX(k), lc = laneColor(o, k), active = k === lead.fk;
+    const t = tips.find((q) => q.k === k);
+    ctx.strokeStyle = rgba(lc.startsWith("#") ? lc : "#9aa4b4", active ? 0.7 : 0.2); ctx.lineWidth = active ? 2 : 1;
+    ctx.beginPath(); ctx.moveTo(cx, hitY + 9); ctx.lineTo(t.x, t.y); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(cx - 13, hitY - 8, 26, 16, 8);
+    ctx.fillStyle = active ? (lc.startsWith("#") ? lc : "#9aa4b4") : "rgba(20,22,28,0.9)"; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = lc.startsWith("#") ? lc : "#9aa4b4"; ctx.stroke();
+    ctx.fillStyle = active ? "#0b0d12" : (lc.startsWith("#") ? lc : "#9aa4b4");
+    ctx.font = "700 11px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(FK.indexOf(k) + 1), cx, hitY + 0.5);
+  });
+}
+
+/* ---------- 自動再生（♩=90。弾いたことにして1音ずつ進める） ---------- */
+const EIGHTH_MS = 60000 / 90 / 2;
+let step = 0, view = 0, nextAt = performance.now() + 900, playing = true;
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function tick(now) {
+  if (playing && now >= nextAt) {
+    nextAt = now + SEQ[step].ioi * EIGHTH_MS;
+    step++;
+    if (step >= SEQ.length) { step = 0; view = 0; nextAt = now + 1200; }
+  }
+  const target = SEQ[step].onset;
+  view += reduced ? (target - view) : (target - view) * 0.2;
+  drawStage(document.getElementById("cv-now"), STATE_NOW, view, step);
+  drawStage(document.getElementById("cv-try"), st, view, step);
+  requestAnimationFrame(tick);
+}
+
+/* ---------- 切り替えパネル ---------- */
+const DESC = {
+  finger: "色＝指。レーンの位置と色の両方で「どの指か」を伝える。手のイラストも同じ色にすると対応が強くなる。",
+  pitch: "色＝音の高さ（ド赤・レ橙・ミ黄・ファ緑・ソ青）。低いオクターブは暗め。音を覚える助けになるが、同じ指でも色が変わる。",
+  focus: "次の音だけ色を付け、ほかは灰色。視線が次の音に集まるが、先の音の指が色では分からない。"
+};
+function renderPanel() {
+  document.querySelectorAll("#panel .seg").forEach((g) => {
+    const k = g.dataset.k;
+    g.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(st[k] === b.dataset.v)));
+  });
+  document.getElementById("ctl-palette").hidden = st.color !== "finger";
+  document.getElementById("desc").textContent = DESC[st.color];
+  renderPalette();
+}
+document.querySelectorAll("#panel .seg").forEach((g) => g.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  st[g.dataset.k] = b.dataset.v; renderPanel();
+}));
+document.getElementById("play").addEventListener("click", (e) => {
+  playing = !playing; e.target.textContent = playing ? "一時停止" : "再生";
+  if (playing) nextAt = performance.now() + 300;
+});
+
+/* ---------- 配色の検証（コントラスト比と色覚シミュレーション：Viénot 1999 の近似） ---------- */
+const SIM = {
+  d: [[0.29275, 0.70725, 0], [0.29275, 0.70725, 0], [-0.02234, 0.02234, 1]],
+  p: [[0.11238, 0.88762, 0], [0.11238, 0.88762, 0], [0.00401, -0.00401, 1]]
+};
+function simulate(hex, M) {
+  const toL = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const toS = (v) => { v = Math.max(0, Math.min(1, v)); return Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055)); };
+  const c = hexRgb(hex).map(toL);
+  const o = M.map((row) => row[0] * c[0] + row[1] * c[1] + row[2] * c[2]);
+  return "#" + o.map(toS).map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+function dist(a, b) { const A = hexRgb(a), B = hexRgb(b); return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]); }
+function renderPalette() {
+  let rows, label;
+  if (st.color === "pitch") { rows = Object.entries(PITCH).map(([k, v]) => [k === "B♭" ? "シ♭" : { C: "ド", D: "レ", E: "ミ", F: "ファ", G: "ソ", A: "ラ" }[k], v]); label = "音"; }
+  else if (st.color === "focus") { rows = [["次の音", CYAN], ["ほかの音", "#5d6676"]]; label = "役割"; }
+  else { rows = FK.map((k, i) => [`${i + 1} ${["親指", "人差し指", "中指", "薬指", "小指"][i]}`, PALETTES[st.palette][k]]); label = "指"; }
+  const stage = [10, 10, 10];
+  document.getElementById("pal").innerHTML = `<thead><tr><th>${label}</th><th>色</th><th>文字の読みやすさ（次の音）</th><th>2型色覚の見え方</th><th>1型色覚の見え方</th></tr></thead><tbody>` +
+    rows.map(([n, c]) => {
+      const t = textOn(c), cr = contrast(hexRgb(c), hexRgb(t)), bgc = contrast(hexRgb(c), stage);
+      return `<tr><td>${n}</td><td><span class="sw" style="background:${c};color:${t}">ソ</span> <span class="mono">${c}</span></td>
+        <td class="mono">${cr.toFixed(1)}:1 ${cr >= 4.5 ? "✓" : "△"}<span style="color:var(--muted)"> ・ 背景との差 ${bgc.toFixed(1)}:1</span></td>
+        <td><span class="sw" style="background:${simulate(c, SIM.d)}"></span></td><td><span class="sw" style="background:${simulate(c, SIM.p)}"></span></td></tr>`;
+    }).join("") + "</tbody>";
+  // 隣り合うレーン（または全組）の、色覚シミュレーション後の近さ
+  const pairs = [];
+  for (let i = 0; i < rows.length; i++) for (let j = i + 1; j < rows.length; j++) {
+    const dd = dist(simulate(rows[i][1], SIM.d), simulate(rows[j][1], SIM.d));
+    pairs.push([dd, rows[i][0], rows[j][0]]);
+  }
+  pairs.sort((a, b) => a[0] - b[0]);
+  const worst = pairs.slice(0, 2).map(([d, a, b]) => `<span><b>${a}</b> と <b>${b}</b>：差 ${Math.round(d)}${d < 40 ? "（ほぼ同じに見える）" : d < 80 ? "（やや似ている）" : "（区別しやすい）"}</span>`).join("");
+  document.getElementById("pairs").innerHTML = `<span style="color:var(--muted)">2型色覚でいちばん似て見える組：</span>${worst}`;
+}
+
+renderPanel();
+requestAnimationFrame(tick);
+</script>
