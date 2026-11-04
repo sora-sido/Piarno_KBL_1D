@@ -290,12 +290,13 @@ function drawStage(cv, o, view, step) {
     const solid = col.startsWith("#") ? col : "#888888";
     ctx.fillStyle = (isLead || played) ? textOn(solid) : "#ffffff";
     ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-    const cx = x + w / 2, ty = yb - (o.shape === "bar" ? 12 : (headH - fs * 0.78) / 2 + 2);
+    const dotRoom = o.octave === "dot" && o.label !== "finger" ? fs * 0.32 : 0;
+    const cx = x + w / 2, ty = yb - (o.shape === "bar" ? 12 + dotRoom : (headH - fs * 0.78) / 2 + 2 + dotRoom * 0.5);
     let main = o.label === "finger" ? String(nt.finger) : nt.name;
     ctx.font = `700 ${o.label === "finger" ? fs * 1.05 : (main.length > 1 ? fs * 0.8 : fs)}px "IBM Plex Sans JP", "Hiragino Sans", sans-serif`;
     ctx.fillText(main, cx, ty);
     if (o.octave === "dot" && o.label !== "finger" && nt.oct === 3) {
-      ctx.beginPath(); ctx.arc(cx, ty + 5, Math.max(2, fs * 0.13), 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, ty + fs * 0.34, Math.max(2, fs * 0.12), 0, Math.PI * 2); ctx.fill();
     }
     if (o.label === "namefinger" && o.shape === "bar" && h > fs + 22) {
       ctx.font = `700 ${Math.round(fs * 0.55)}px sans-serif`; ctx.fillText(String(nt.finger), cx, top + fs * 0.75);
