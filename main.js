@@ -1566,7 +1566,9 @@ function layoutPlayView() {
   playLayout.left = left;
   playLayout.laneW = width / 5;
   playLayout.topY = 58;
-  playLayout.hitY = Math.max(playLayout.topY + 140, handTop + S * 0.08 - 26);
+  // 判定ラインの下に「弾いた音」を残して見せる帯をとる（弾いた直後にノーツが消えないように）
+  playLayout.playedZone = Math.round(Math.max(60, Math.min(110, S * 0.26)));
+  playLayout.hitY = Math.max(playLayout.topY + 140, handTop + S * 0.08 - 26 - playLayout.playedZone);
   LANE_ORDER.forEach((k, i) => { playLayout.lanes[k] = left + playLayout.laneW * (i + 0.5); });
 
   // レーンの背景は動かないので、毎フレーム描かずに CSS の要素で表示する（描画の負担を減らす）
@@ -1574,7 +1576,7 @@ function layoutPlayView() {
   bg.style.left = `${left}px`;
   bg.style.top = `${playLayout.topY}px`;
   bg.style.width = `${width}px`;
-  bg.style.height = `${playLayout.hitY - playLayout.topY}px`;
+  bg.style.height = `${playLayout.hitY + playLayout.playedZone - playLayout.topY}px`;
   laneActiveKey = null;
 }
 
@@ -1644,9 +1646,16 @@ function drawRhythmHighway(now) {
       ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + width, y); ctx.stroke();
       ctx.fillStyle = "rgba(255,255,255,0.45)";
       ctx.font = "11px sans-serif";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      ctx.fillText(`${e / 8 + 1}`, left - 4, y);
+      // 小節番号：左に余白があれば線の左、狭い画面ではレーンの内側に
+      if (left >= 26) {
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`${e / 8 + 1}`, left - 4, y);
+      } else {
+        ctx.textAlign = "left";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(`${e / 8 + 1}`, left + 3, y - 2);
+      }
     } else if (e % 2 === 0) {
       ctx.strokeStyle = "rgba(255,255,255,0.08)";
       ctx.lineWidth = 1;
@@ -1657,25 +1666,27 @@ function drawRhythmHighway(now) {
   // ノーツ（下端＝音の始まり、長さ＝音の長さ）
   ctx.save();
   ctx.beginPath();
-  ctx.rect(left - 2, topY, width + 4, hitY - topY + 30);
+  const zoneBottom = hitY + (playLayout.playedZone || 0);
+  ctx.rect(left - 2, topY, width + 4, zoneBottom - topY);
   ctx.clip();
-  for (let i = Math.max(0, currentSongStep - 2); i < seq.length; i++) {
+  for (let i = Math.max(0, currentSongStep - 8); i < seq.length; i++) {
     const n = seq[i];
     const yb = yOf(n.onset);
     if (yb < topY) break;
     const isLead = i === currentSongStep;
     const played = i < currentSongStep;
+    const h = Math.max(34, n.dur * ppe - 4);
     let alpha = 1;
     if (played) {
-      alpha = Math.max(0, 1 - (yb - hitY) / 30);
-      if (alpha <= 0) continue;
+      // 弾いた音は判定ラインの下の帯を薄く流れていき、帯の下端に近づくにつれて消える
+      if (yb - h >= zoneBottom) continue;
+      alpha = Math.max(0.15, Math.min(1, (zoneBottom - (yb - h)) / 40));
     }
-    const h = Math.max(34, n.dur * ppe - 4);
     const x = playLayout.lanes[n.fingerKey] - (laneW - 10) / 2;
     const w = laneW - 10;
     const color = LANE_COLORS[n.fingerKey] || "#00e5ff";
     const top = yb - h;
-    ctx.globalAlpha = played ? alpha * 0.35 : 1;
+    ctx.globalAlpha = played ? alpha * 0.5 : 1;
 
     if (isLead) {
       // 光の縁取り（ぼかし効果 shadowBlur は重いので、半透明の一回り大きい枠で代用）
@@ -1698,7 +1709,9 @@ function drawRhythmHighway(now) {
     ctx.textBaseline = "alphabetic";
     const fs = Math.max(14, Math.min(26, laneW * 0.32));
     ctx.font = `bold ${fs}px "Hiragino Sans", "Noto Sans JP", sans-serif`;
-    ctx.fillText(n.note, x + w / 2, yb - 14);
+    // 弾いた音で下端が帯からはみ出している場合も、見えている部分に音名を出す
+    const labelY = played ? Math.max(top + fs + 4, Math.min(yb - 14, zoneBottom - 10)) : yb - 14;
+    ctx.fillText(n.note, x + w / 2, labelY);
     if (h > fs + 22) {
       ctx.font = `bold ${Math.round(fs * 0.55)}px sans-serif`;
       ctx.fillText(`${n.fingerNum}`, x + w / 2, top + fs * 0.7);
@@ -1740,6 +1753,7 @@ function drawRhythmHighway(now) {
 // ==========================================================================
 let freeTapCount = 0;
 let freeLastAnyHit = -Infinity;
+let freeLastFinger = null; // 最後に叩いた指（次に叩くまでレーンと音名を光らせたままにする）
 const freeState = {};
 const freeHitMarks = []; // 打鍵したレーンから上へ昇っていく光（{ finger, t }）
 
@@ -1747,6 +1761,7 @@ export function resetFreePlay() {
   freeTapCount = 0;
   freeLastAnyHit = -Infinity;
   freeHitMarks.length = 0;
+  freeLastFinger = null;
   LANE_ORDER.forEach((k) => { freeState[k] = { state: "IDLE", low: 0, last: -Infinity }; });
 }
 resetFreePlay();
@@ -1787,6 +1802,7 @@ function handleFreePlay(width, height, now) {
   setTargetFinger(hitKey);
   renderSongGuideUI();
   freeHitMarks.push({ finger: hitKey, t: now });
+  freeLastFinger = hitKey;
   spawnHitParticles(playMode ? laneHitPos(hitKey) : getGuideFingerScreenPos(hitKey), LANE_COLORS[hitKey]);
   const widget = document.getElementById("hand-guide-widget");
   if (widget) {
@@ -1814,13 +1830,12 @@ function drawFreeHighway(now) {
   const ctx = notesCtx;
   const { hitY, topY, laneW, left, width } = playLayout;
   if (hitY <= topY) return;
-  const lastMark = freeHitMarks[freeHitMarks.length - 1];
-  if (lastMark && now - lastMark.t < 250) setActiveLane(lastMark.finger, hexToRgba(LANE_COLORS[lastMark.finger], 0.16));
+  if (freeLastFinger) setActiveLane(freeLastFinger, hexToRgba(LANE_COLORS[freeLastFinger], 0.16));
   else setActiveLane(null, "");
   // 昇っていく光（約0.9秒で消える）
   for (let i = freeHitMarks.length - 1; i >= 0; i--) {
     const m = freeHitMarks[i];
-    const age = (now - m.t) / 900;
+    const age = (now - m.t) / 1600;
     if (age >= 1) { freeHitMarks.splice(i, 1); continue; }
     const cx = playLayout.lanes[m.finger];
     const h = 60;
@@ -1844,7 +1859,7 @@ function drawFreeHighway(now) {
   LANE_ORDER.forEach((k) => {
     const cx = playLayout.lanes[k];
     const color = LANE_COLORS[k];
-    const recent = freeHitMarks.some((m) => m.finger === k && now - m.t < 250);
+    const recent = k === freeLastFinger;
     const tip = getGuideFingerScreenPos(k);
     ctx.strokeStyle = hexToRgba(color, recent ? 0.8 : 0.3);
     ctx.lineWidth = recent ? 2 : 1;
@@ -1934,6 +1949,18 @@ window.addEventListener("resize", resizeNotesCanvas);
 /**
  * 毎フレームのノーツ描画とアニメーション更新（画面上部から指先への落下）
  */
+// 開発サーバーでのみ使う確認用フック（本番ビルドでは除去される）：打鍵したことにして1音進める
+if (import.meta.env && import.meta.env.DEV) {
+  window.__piarnoTest = {
+    advance() {
+      triggerNoteHitEffect(currentSongStep);
+      currentSongStep = Math.min(currentSongStep + 1, currentSequence.length - 1);
+      setTargetFinger(currentSequence[currentSongStep].fingerKey);
+      renderSongGuideUI();
+    }
+  };
+}
+
 let lastNotesSignature = "";
 function updateAndRenderNotes() {
   if (!notesCanvas || !notesCtx) return;
