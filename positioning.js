@@ -122,6 +122,12 @@ export function directionGraphic(dir) {
   return `<div class="dir-icon">${svg}</div><div class="dir-label">${DIR_LABEL[dir] || ""}</div>`;
 }
 
+// 位置合わせ画面の一言
+const SHORT_MSG = {
+  left: "もう少し左へ", right: "もう少し右へ", up: "もう少し上へ", down: "もう少し下へ",
+  closer: "もう少し近づけて", away: "もう少し離して", center: "枠の中央へ", nohand: "右手を枠に入れてください"
+};
+
 export function isPositioning() {
   return state.active;
 }
@@ -134,6 +140,7 @@ export function startPositioning(container, onDone) {
   state.active = true;
   state.onDone = onDone;
   state.goodSince = null;
+  state.finishing = false;
   document.body.classList.add("positioning");
   if (state.el) state.el.remove();
 
@@ -165,20 +172,11 @@ export function startPositioning(container, onDone) {
   panel.className = "pos-panel";
   panel.setAttribute("role", "status");
   panel.innerHTML = `
-    <div class="pos-title">右手の位置合わせ</div>
-    <div class="pos-msg" id="pos-msg">右手を点線の枠に合わせてください</div>
-    <div class="pos-hint">スマホを手の正面・机の高さに立て、<b>手は机に置いたまま</b>（浮かせずに）、濃い手のイラストに重ねてください。指先が下の線（机）に乗るのが目安です</div>
-    <ul class="pos-checks">
-      <li data-k="hand">手が見えている</li>
-      <li data-k="pos">枠の位置</li>
-      <li data-k="size">大きさ</li>
-      <li data-k="edge">指先まで写っている</li>
-    </ul>
-    <div class="pos-rule">演奏中は、ここで合わせた位置から<b>手を動かさずに</b>弾いてください。ずれたら画面に矢印が出ます</div>
-    <div class="pos-bar"><span id="pos-bar-fill"></span></div>
+    <div class="pos-msg" id="pos-msg">右手を枠に入れてください</div>
     <div class="pos-actions">
       <button type="button" class="pos-btn" id="pos-skip">この位置で始める</button>
-    </div>`;
+    </div>
+    <div class="pos-bar"><span id="pos-bar-fill"></span></div>`;
   document.body.appendChild(panel);
   state.el = el;
   state.panel = panel;
@@ -193,12 +191,9 @@ export function updatePositioning(landmarks) {
   const r = evaluateHandPosition(landmarks);
   state.lastResult = r;
   const panel = state.panel;
-  panel.querySelector("#pos-msg").textContent = r.message;
-  const set = (k, ok) => panel.querySelector(`li[data-k="${k}"]`).classList.toggle("ok", !!ok);
-  set("hand", !!landmarks);
-  set("pos", r.checks && r.checks.centerX && r.checks.centerY);
-  set("size", r.checks && r.checks.size);
-  set("edge", r.checks && r.checks.visible);
+  if (state.finishing) return;
+  // 表示は短い一言だけ（向きは大きな矢印でも示す）
+  panel.querySelector("#pos-msg").textContent = r.ok ? "そのまま止めて" : (SHORT_MSG[r.dir] || "右手を枠に入れてください");
 
   const handRect = state.el.querySelector(".pos-hand");
   if (r.box) {
@@ -225,8 +220,10 @@ export function updatePositioning(landmarks) {
     const p = Math.min(1, (now - state.goodSince) / HOLD_MS);
     panel.querySelector("#pos-bar-fill").style.width = `${p * 100}%`;
     if (p >= 1) {
-      panel.querySelector("#pos-msg").textContent = "OK！この位置で判定します。演奏中は手をここから動かさないでください";
-      finish();
+      // 決まった一言を少し見せてから演奏へ
+      panel.querySelector("#pos-msg").textContent = "OK！この位置のまま弾いてください";
+      state.finishing = true;
+      setTimeout(() => { state.finishing = false; finish(); }, 800);
     }
   } else {
     state.goodSince = null;
@@ -284,7 +281,7 @@ function injectStyles() {
   .pos-dir { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; }
   @media (max-height: 500px) { .pos-panel { left: 12px; transform: none; width: min(360px, 45vw); } .pos-hint { display: none; } }
   .pos-title { font-weight: 700; font-size: 15px; }
-  .pos-msg { font-size: 15px; line-height: 1.45; min-width: 0; }
+  .pos-msg { font-size: 17px; font-weight: 700; line-height: 1.4; min-width: 0; grid-column: 1; grid-row: 1; }
   .pos-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
   .pos-checks li { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #222; color: #888; }
   .pos-checks li::before { content: "・"; }
@@ -292,7 +289,7 @@ function injectStyles() {
   .pos-checks li.ok::before { content: "✓ "; }
   .pos-bar { height: 4px; border-radius: 2px; background: #222; overflow: hidden; }
   .pos-bar span { display: block; height: 100%; width: 0; background: #3ddc84; transition: width .1s linear; }
-  .pos-actions { display: flex; justify-content: flex-end; grid-column: 2; grid-row: 2; }
+  .pos-actions { display: flex; justify-content: flex-end; grid-column: 2; grid-row: 1; }
   .pos-btn { font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 8px; border: 1px solid #555; background: transparent; color: #ddd; cursor: pointer; }
   .pos-btn:focus-visible { outline: 2px solid #00e5ff; outline-offset: 2px; }
   `;
