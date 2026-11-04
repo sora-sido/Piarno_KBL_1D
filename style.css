@@ -1134,3 +1134,170 @@ body.positioning .lane-bg {
   width: 20%;
   display: none;
 }
+
+/* ==========================================================================
+   右上の設定（⚙）ボタンとパネル
+   ========================================================================== */
+.settings-btn {
+  position: relative;
+}
+.settings-btn .btn-icon {
+  width: 22px;
+  height: 22px;
+}
+.settings-btn .gear {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.settings-btn[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.18);
+}
+.settings-rec-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f0626c;
+  display: none;
+}
+body.is-recording .settings-rec-dot,
+body.is-rec-armed .settings-rec-dot {
+  display: block;
+}
+body.is-recording .settings-rec-dot {
+  animation: rec-pulse 1s ease-in-out infinite;
+}
+
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(320px, calc(100vw - 24px));
+  max-height: calc(100vh - 90px);
+  max-height: calc(100dvh - 90px);
+  overflow-y: auto;
+  background: rgba(16, 18, 24, 0.97);
+  border: 1px solid #2c3440;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  padding: 10px 12px 14px;
+  display: grid;
+  gap: 12px;
+  color: #e8ecf2;
+  z-index: 400;
+}
+.settings-panel.hidden {
+  display: none;
+}
+.sp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 2px 2px 0;
+}
+.sp-close {
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: #9aa4b4;
+  cursor: pointer;
+}
+.sp-section {
+  display: grid;
+  gap: 4px;
+}
+.sp-title {
+  font-size: 11.5px;
+  color: #9aa4b4;
+  letter-spacing: 0.04em;
+  padding: 0 4px 2px;
+}
+.settings-panel .sp-row {
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e8ecf2;
+  cursor: pointer;
+}
+.settings-panel .sp-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.settings-panel .sp-row:focus-visible,
+.sp-close:focus-visible,
+.settings-btn:focus-visible {
+  outline: 2px solid #56b4e9;
+  outline-offset: 2px;
+}
+/* 選んでいる曲 */
+.settings-panel .song-menu-item.active {
+  border-color: #56b4e9;
+  background: rgba(86, 180, 233, 0.14);
+}
+.settings-panel .song-menu-item.active::after {
+  content: "✓";
+  color: #56b4e9;
+  font-weight: 700;
+}
+/* 記録の行（赤い丸＋文字） */
+.settings-panel .rec-btn {
+  justify-content: flex-start;
+}
+.settings-panel .rec-btn .rec-dot {
+  flex: none;
+}
+/* オン／オフのスイッチ */
+.sp-switch {
+  flex: none;
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+  background: #3a4352;
+  position: relative;
+  transition: background 0.15s;
+}
+.sp-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.15s;
+}
+.sp-toggle[aria-pressed="true"] .sp-switch {
+  background: #00b386;
+}
+.sp-toggle[aria-pressed="true"] .sp-switch::after {
+  transform: translateX(16px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sp-switch, .sp-switch::after { transition: none; }
+}
+
+/* 設定パネルが、ノーツ（215）・カメラ小窓（230）・ずれの矢印（260）より手前に出るように */
+.top-right-controls {
+  z-index: 450;
+}

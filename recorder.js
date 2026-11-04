@@ -58,10 +58,10 @@ export function setupRecordButton(container, onArm) {
   recordBtn = document.createElement("button");
   recordBtn.id = "record-btn";
   recordBtn.type = "button";
-  recordBtn.className = "ctrl-circle-btn rec-btn";
+  recordBtn.className = "sp-row rec-btn";
   recordBtn.setAttribute("aria-label", "演奏を記録して振り返る");
   recordBtn.title = "演奏を記録して振り返る";
-  recordBtn.innerHTML = `<span class="rec-dot" aria-hidden="true"></span>`;
+  recordBtn.innerHTML = `<span class="rec-dot" aria-hidden="true"></span><span class="rec-label">演奏を記録して振り返る</span>`;
   recordBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     if (rec.active) {
@@ -76,7 +76,7 @@ export function setupRecordButton(container, onArm) {
       if (rec.onRestart) rec.onRestart();
     }
   });
-  container.prepend(recordBtn);
+  container.appendChild(recordBtn);
   updateButton();
 }
 
@@ -86,6 +86,11 @@ function updateButton() {
   recordBtn.classList.toggle("recording", rec.active);
   recordBtn.setAttribute("aria-pressed", String(rec.armed || rec.active));
   recordBtn.title = rec.active ? "記録を止めて振り返る" : rec.armed ? "記録の準備中（タップで取り消し）" : "演奏を記録して振り返る";
+  const label = recordBtn.querySelector(".rec-label");
+  if (label) label.textContent = recordBtn.title;
+  // 設定パネルを閉じていても記録中と分かるように、⚙ ボタンに赤い点を出す
+  document.body.classList.toggle("is-recording", rec.active);
+  document.body.classList.toggle("is-rec-armed", rec.armed && !rec.active);
 }
 
 /**

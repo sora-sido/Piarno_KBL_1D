@@ -963,6 +963,7 @@ export function beginPositioning(onStart) {
 let pipStatusFrame = 0;
 let pipBadSince = null;
 let driftDismissedSong = null;      // 矢印をタップして非表示にした曲
+let driftWarningsEnabled = true;    // 設定パネルの「手のずれの警告」
 const DRIFT_SHOW_MS = 2500;          // ずれがこの時間続いたら知らせる
 const LOST_SHOW_MS = 3000;           // 手を見失ってこの時間たったら知らせる
 const RECENT_HIT_SUPPRESS_MS = 2000; // 直近にこの時間以内に音が鳴っていれば、弾けているので知らせない
@@ -978,7 +979,7 @@ function updatePipStatus(landmarks) {
   const lastHit = Math.max(lastHitTime, freeLastAnyHit);
   const playingWell = now - lastHit < RECENT_HIT_SUPPRESS_MS;
   const waitMs = r.code === "nohand" ? LOST_SHOW_MS : DRIFT_SHOW_MS;
-  const bad = pipBadSince !== null && now - pipBadSince > waitMs && !playingWell && driftDismissedSong !== currentSongId;
+  const bad = driftWarningsEnabled && pipBadSince !== null && now - pipBadSince > waitMs && !playingWell && driftDismissedSong !== currentSongId;
   vc.style.setProperty("--pip-border", r.ok ? "rgba(61,220,132,0.9)" : bad ? "rgba(240,98,108,0.95)" : "rgba(255,255,255,0.4)");
 
   let guide = vc.querySelector(".pip-guide");
@@ -3929,60 +3930,81 @@ if (csvFileInput) {
 }
 
 // 画面右上の丸い楽曲選択ボタンとメニュー
-// 右上：手の位置合わせをやり直すボタン
-const topRightControlsForPos = document.querySelector(".top-right-controls");
-if (topRightControlsForPos) {
-  const posBtn = document.createElement("button");
-  posBtn.type = "button";
-  posBtn.id = "position-btn";
-  posBtn.className = "ctrl-circle-btn";
-  posBtn.title = "手の位置合わせをやり直す";
-  posBtn.setAttribute("aria-label", "手の位置合わせをやり直す");
-  posBtn.innerHTML = `<svg viewBox="0 0 24 24" class="btn-icon" aria-hidden="true" style="width:20px;height:20px;fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><circle cx="12" cy="12" r="2.5"/></svg>`;
-  posBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (isPredicting && !isPositioning()) beginPositioning(() => {});
-  });
-  topRightControlsForPos.prepend(posBtn);
+// ==========================================================================
+// 右上の設定（⚙）パネル：曲の選択・演奏の記録・位置合わせ・表示の切り替え
+// ==========================================================================
+const settingsBtn = document.getElementById("settings-btn");
+const settingsPanel = document.getElementById("settings-panel");
+
+function setSettingsOpen(open) {
+  if (!settingsPanel || !settingsBtn) return;
+  settingsPanel.classList.toggle("hidden", !open);
+  settingsBtn.setAttribute("aria-expanded", String(open));
 }
 
-// 右上：演奏の記録ボタン（● → カウントダウン後の演奏を記録し、終了後に振り返り画面を表示）
-const topRightControls = document.querySelector(".top-right-controls");
-if (topRightControls) {
-  setupRecordButton(topRightControls, () => {
+if (settingsBtn && settingsPanel) {
+  settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ensureAudioContext();
+    setSettingsOpen(settingsPanel.classList.contains("hidden"));
+  });
+  document.getElementById("settings-close")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setSettingsOpen(false);
+  });
+  // パネルの外をタップしたら閉じる（画面側の要素がタップを止めていても閉じられるよう、捕捉段階で受け取る）
+  document.addEventListener("pointerdown", (e) => {
+    if (!settingsPanel.classList.contains("hidden") && !settingsPanel.contains(e.target) && !settingsBtn.contains(e.target)) {
+      setSettingsOpen(false);
+    }
+  }, true);
+  settingsPanel.addEventListener("click", (e) => e.stopPropagation());
+}
+
+// 曲を選ぶ
+document.querySelectorAll(".song-menu-item").forEach((item) => {
+  item.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ensureAudioContext();
+    const songId = item.dataset.song;
+    if (songId) selectSong(songId);
+    setSettingsOpen(false);
+  });
+});
+
+// 演奏を記録して振り返る（recorder.js）
+const recordSlot = document.getElementById("sp-record-slot");
+if (recordSlot) {
+  setupRecordButton(recordSlot, () => {
+    setSettingsOpen(false);
     // カメラ起動済みなら、今の曲を最初からカウントダウン付きで始め直す（起動前ならスタート時に記録開始）
     if (isPredicting) selectSong(currentSongId, true);
   });
 }
 
-const songSelectBtn = document.getElementById("song-select-btn");
-const songSelectMenu = document.getElementById("song-select-menu");
+// 手の位置合わせをやり直す
+document.getElementById("position-btn")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setSettingsOpen(false);
+  if (isPredicting && !isPositioning()) beginPositioning(() => {});
+});
 
-if (songSelectBtn && songSelectMenu) {
-  // 丸ボタンタップでメニュー表示/非表示トグル
-  songSelectBtn.addEventListener("click", (e) => {
+// 手のずれの警告（矢印）のオン／オフ
+const DRIFT_WARNING_STORAGE_KEY = "piarno_drift_warning";
+const driftToggleBtn = document.getElementById("drift-toggle-btn");
+if (driftToggleBtn) {
+  try {
+    driftWarningsEnabled = localStorage.getItem(DRIFT_WARNING_STORAGE_KEY) !== "false";
+  } catch {
+    driftWarningsEnabled = true;
+  }
+  const updateDriftUI = () => driftToggleBtn.setAttribute("aria-pressed", String(driftWarningsEnabled));
+  updateDriftUI();
+  driftToggleBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    ensureAudioContext(); // ユーザー操作契機でオーディオ初期化
-    songSelectMenu.classList.toggle("hidden");
-  });
-
-  // メニュー項目タップで曲選択
-  document.querySelectorAll(".song-menu-item").forEach((item) => {
-    item.addEventListener("click", (e) => {
-      e.stopPropagation();
-      ensureAudioContext();
-      const songId = item.dataset.song;
-      if (songId) {
-        selectSong(songId);
-      }
-    });
-  });
-
-  // 画面外タップでメニューを閉じる
-  document.addEventListener("click", (e) => {
-    if (!songSelectMenu.classList.contains("hidden") && !songSelectMenu.contains(e.target)) {
-      songSelectMenu.classList.add("hidden");
-    }
+    driftWarningsEnabled = !driftWarningsEnabled;
+    try { localStorage.setItem(DRIFT_WARNING_STORAGE_KEY, String(driftWarningsEnabled)); } catch { /* 保存できない環境 */ }
+    updateDriftUI();
   });
 }
 
