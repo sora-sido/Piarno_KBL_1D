@@ -1421,3 +1421,19 @@ body.positioning .song-progress-bar {
   line-height: 1.5;
   color: #9aa4b4;
 }
+
+/* データ記録（datalog.js）の表示：遅れの測定と重ならないよう左上に置く */
+.datalog-hud {
+  left: max(12px, env(safe-area-inset-left, 0px));
+  transform: none;
+  width: min(320px, calc(100vw - 24px));
+}
+.dl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dl-actions[hidden],
+.datalog-hud .lh-close[hidden] {
+  display: none;
+}

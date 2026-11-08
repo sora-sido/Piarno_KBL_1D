@@ -11,6 +11,8 @@ import * as Tone from "tone";
 import { setupRecordButton, onPlayStart, onHit as onRecordHit, recordFrame, isRecording } from "./recorder.js";
 import { startPositioning, updatePositioning, isPositioning, evaluateDrift, directionGraphic } from "./positioning.js";
 import { setupLatencyButton, isLatencyMode, onLatencyTap } from "./latency.js";
+import { acquireMic, releaseMic, onKnock, notifySoundPlayed } from "./mic.js";
+import { setupDataLogButton, isDataLogging, logFrame, logFire } from "./datalog.js";
 
 // 打鍵→発音の遅延対策：Tone.js は時刻未指定の発音を既定で lookAhead（0.1秒）後に予約するため、
 // 0 にして打鍵判定と同じ瞬間に鳴らす（リアルタイム演奏用。シーケンス再生はしないので先読みは不要）
@@ -317,6 +319,9 @@ export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true, optio
     }
     return;
   }
+
+  // マイクがこの音を拾っても打鍵と間違えないよう、鳴らした時刻を知らせる
+  notifySoundPlayed();
 
   // 配列が渡された場合は和音（各構成音）として自然に同時発音
   if (Array.isArray(targetFreqOrNote)) {
@@ -1836,11 +1841,21 @@ function handleFreePlay(width, height, now) {
     freeState[k].low = ry[k];
     if (i === 0) freeState[k].last = now;
   });
-  const hitKey = candidates[0].k;
+  freePlayHit(candidates[0].k, now, "camera");
+}
+
+/**
+ * フリー演奏で、指 hitKey の音を鳴らす（カメラ判定・マイク判定の共通処理）
+ * @param {string} hitKey
+ * @param {number} now
+ * @param {"camera"|"mic"} source
+ */
+function freePlayHit(hitKey, now, source) {
   freeLastAnyHit = now;
   freeTapCount++;
 
   const note = FREE_NOTE_BY_FINGER[hitKey];
+  logFire({ t: performance.now(), src: source, mode: "free", finger: hitKey, note: note.rightNote });
   playTapSound(note.rightNote, true, { duration: "2n", isBass: false });
   setTargetFinger(hitKey);
   renderSongGuideUI();
@@ -3052,7 +3067,7 @@ let lastVideoTimestamp = -1;
  * 毎フレームの推論処理（単一フレーム）
  * @param {number} frameTime
  */
-function processVideoFrame(frameTime) {
+function processVideoFrame(frameTime, metadata = null) {
   if (!isPredicting) return;
 
   // カメラ解像度とCanvas解像度の完全一致を常時保証（iPadの向き変更・比率変更時の座標ズレ防止）
@@ -3078,6 +3093,9 @@ function processVideoFrame(frameTime) {
   // 生ランドマーク座標の直接描画
   drawRawHandLandmarks(results);
 
+  // マイク判定用の直近の動き・データ記録
+  afterFrame(startTime, now, metadata);
+
   // FPS更新
   updateFps();
 }
@@ -3092,7 +3110,7 @@ function schedulePredictLoop() {
   if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
     video.requestVideoFrameCallback((now, metadata) => {
       const frameTime = (metadata && metadata.presentationTime) ? metadata.presentationTime * 1000 : now;
-      processVideoFrame(frameTime);
+      processVideoFrame(frameTime, metadata);
       schedulePredictLoop();
     });
   } else {
@@ -3254,6 +3272,138 @@ function selectRightHandLandmarks(results) {
  * 手首・手のひら・全指先を独立した 1 Euro Filter で常時平滑化し、ジッターと飛びを完全排除
  * @param {object} results
  */
+// ==========================================================================
+// 打鍵したときの曲の進行（カメラの判定・マイクの判定で共通）
+// ==========================================================================
+/**
+ * @param {"camera"|"mic"} source 何で打鍵を判定したか
+ * @param {string} detail ログに出す判定の詳細
+ */
+function songHit(source, detail = "") {
+  if (!currentSequence || !currentSequence.length) return;
+  onRecordHit(currentSongStep);
+
+  // 該当指先でノーツHIT弾けエフェクトを発火
+  triggerNoteHitEffect(currentSongStep);
+
+  // 右手運指ガイドウィジェットの打鍵フィードバック（一瞬ポップ）
+  const handGuideWidget = document.getElementById("hand-guide-widget");
+  if (handGuideWidget) {
+    handGuideWidget.classList.add("hit-pop");
+    setTimeout(() => {
+      handGuideWidget.classList.remove("hit-pop");
+    }, 160);
+  }
+
+  // 現在の音符を取得
+  const currentTarget = currentSequence[currentSongStep];
+  logFire({
+    t: performance.now(), src: source, mode: "song", song: currentSongId, step: currentSongStep,
+    finger: currentTarget.fingerKey, note: currentTarget.rightNote || currentTarget.note
+  });
+
+  // 右手正解メロディ音を発音（クリアなアタック）
+  playTapSound(currentTarget.rightNote || currentTarget.freq, true, {
+    duration: "2n",
+    isBass: false
+  });
+
+  // 楽譜通りの左手自動伴奏（単音または和音）が設定されている場合は重ねて自動発音
+  if (currentTarget.autoLeftNote) {
+    playTapSound(currentTarget.autoLeftNote, false, {
+      duration: "1m",
+      isBass: true
+    });
+  }
+  if (source === "camera") updateStateHud("TOUCHED", true);
+
+  console.log(
+    `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [${source === "mic" ? "マイク" : "カメラ"}] 運指:${currentTarget.fingerNum} (${currentTarget.note}) ${detail}${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
+  );
+
+  const isLastStep = currentSongStep === currentSequence.length - 1;
+
+  if (isLastStep) {
+    // 完走時：白黒ミニマルクリア通知（約1.5秒間）を表示後、インデックス0（第1音）へ自動ループ復帰
+    console.log(`[SONG COMPLETE] 全${currentSequence.length}音を完走！クリア通知を表示します`);
+    showClearNotification(() => {
+      currentSongStep = 0;
+      noteProgressMap.clear();
+      resetNoteView();
+      const resetTarget = currentSequence[0];
+      setTargetFinger(resetTarget.fingerKey);
+      renderSongGuideUI();
+      console.log(`[SONG LOOP] 第1音 (${resetTarget.note} / ${resetTarget.fingerKey}) へリセット完了`);
+    });
+  } else {
+    // 通常進行：次の音符へステップ進行
+    currentSongStep = currentSongStep + 1;
+    const nextTarget = currentSequence[currentSongStep];
+
+    // 次のターゲット指へ自動切り替えとガイド更新
+    setTargetFinger(nextTarget.fingerKey);
+    renderSongGuideUI();
+  }
+}
+
+// ==========================================================================
+// マイクで鳴らす：机を叩いた音を聞いた瞬間に発音する（どの指かはカメラの直近の動きで決める）
+// ==========================================================================
+let micTriggerOn = false;
+let lastSelectedHand = null; // 直近のコマで選んだ右手の関節（生の 0〜1 座標）
+const recentFeatures = []; // 直近のコマの 5 本の指の速さ { t, vy }
+
+/** 直近 250ms のコマで、いちばん速く下りてきた指を返す */
+function pickRecentFinger(nowPerf) {
+  let best = null;
+  let bestV = -Infinity;
+  for (const k of LANE_ORDER) {
+    let maxV = -Infinity;
+    for (const f of recentFeatures) {
+      if (nowPerf - f.t <= 250 && f.vy[k] > maxV) maxV = f.vy[k];
+    }
+    if (maxV > bestV) {
+      bestV = maxV;
+      best = k;
+    }
+  }
+  return best;
+}
+
+onKnock((ev) => {
+  if (!micTriggerOn || ev.masked) return;
+  if (!isPredicting || isCountingDown || isClearing || isPositioning()) return;
+  const now = performance.now();
+  if (isFreePlay()) {
+    freePlayHit(pickRecentFinger(now) || freeLastFinger || "THUMB", now, "mic");
+  } else {
+    songHit("mic", `音量 ${ev.level.toFixed(3)}`);
+  }
+});
+
+/** 毎コマ：マイク判定用の直近の動きと、データ記録 */
+function afterFrame(procStart, frameTime, metadata) {
+  const logging = isDataLogging();
+  if (!micTriggerOn && !logging) return;
+  const feats = hasValidSmoothedLandmarks ? computeAllFingerFeatures(canvas.width, canvas.height) : null;
+  const now = performance.now();
+  if (micTriggerOn && feats) {
+    recentFeatures.push({ t: now, vy: feats.vy });
+    while (recentFeatures.length && now - recentFeatures[0].t > 400) recentFeatures.shift();
+  }
+  if (logging) {
+    logFrame({
+      proc: procStart,
+      pt: frameTime,
+      ct: metadata && typeof metadata.captureTime === "number" ? metadata.captureTime : null,
+      hand: !!lastSelectedHand,
+      lm: lastSelectedHand,
+      ry: feats ? feats.ry : null,
+      vy: feats ? feats.vy : null
+    });
+  }
+}
+
 function drawRawHandLandmarks(results) {
   canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -3269,6 +3419,7 @@ function drawRawHandLandmarks(results) {
   // 位置連続性による右手セレクターを実行（左手は完全除外）
   const selectedRightHand = selectRightHandLandmarks(results);
   const hasHands = selectedRightHand !== null;
+  lastSelectedHand = selectedRightHand;
 
   // 手の位置合わせ（起動時の枠表示）と、演奏中の小窓の枠の色
   if (isPositioning()) {
@@ -3387,7 +3538,7 @@ function drawRawHandLandmarks(results) {
   // カウントダウン中（3・2・1）、完走クリア演出中、および画面外復帰初フレームは打鍵認識を安全にスキップ
   // フリー演奏：5本の指すべてを判定し、叩いた指の音を鳴らす（楽譜の判定は行わない）
   if (isFreePlay()) {
-    if (!isCountingDown && !isClearing && !isReacquired && !isPositioning()) {
+    if (!micTriggerOn && !isCountingDown && !isClearing && !isReacquired && !isPositioning()) {
       handleFreePlay(width, height, now);
     }
     updateDebugMetrics(smoothTip.x, smoothTip.y, currentRy, tipVy);
@@ -3400,73 +3551,18 @@ function drawRawHandLandmarks(results) {
   const frameState = tapState;
   let frameHit = false;
 
-  if (tapState === "IDLE" && !isCountingDown && !isClearing && !isReacquired && !isPositioning()) {
+  // 「マイクで鳴らす」がオンのときは、カメラでは鳴らさない（机の音を聞いた瞬間に songHit("mic") で鳴らす）
+  if (micTriggerOn) {
+    // 何もしない
+  } else if (tapState === "IDLE" && !isCountingDown && !isClearing && !isReacquired && !isPositioning()) {
     // 平滑化変位が打鍵閾値以上 かつ 下降速度が速度閾値以上（勢いよく振り下ろされた瞬間）
     if (currentRy >= hitRyThreshold && tipVy >= hitVyThreshold && now - lastHitTime >= MIN_TAP_INTERVAL_MS) {
       tapState = "TOUCHED";
       lastHitTime = now;
       frameHit = true;
-      onRecordHit(currentSongStep);
       touchedLowestRy = currentRy;
       touchedFingerKey = currentFingerKey;
-
-      // 該当指先でノーツHIT弾けエフェクトを発火
-      triggerNoteHitEffect(currentSongStep);
-
-      // 右手運指ガイドウィジェットの打鍵フィードバック（一瞬ポップ）
-      const handGuideWidget = document.getElementById("hand-guide-widget");
-      if (handGuideWidget) {
-        handGuideWidget.classList.add("hit-pop");
-        setTimeout(() => {
-          handGuideWidget.classList.remove("hit-pop");
-        }, 160);
-      }
-
-      // 現在の音符を取得
-      const currentTarget = currentSequence[currentSongStep];
-
-      // 右手正解メロディ音を発音（クリアなアタック）
-      playTapSound(currentTarget.rightNote || currentTarget.freq, true, {
-        duration: "2n",
-        isBass: false
-      });
-
-      // 楽譜通りの左手自動伴奏（単音または和音）が設定されている場合は重ねて自動発音
-      if (currentTarget.autoLeftNote) {
-        playTapSound(currentTarget.autoLeftNote, false, {
-          duration: "1m",
-          isBass: true
-        });
-      }
-      updateStateHud("TOUCHED", true);
-
-      console.log(
-        `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}, vy=${tipVy.toFixed(1)} >= V_TH:${hitVyThreshold}${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
-      );
-
-      const isLastStep = currentSongStep === currentSequence.length - 1;
-
-      if (isLastStep) {
-        // 完走時：白黒ミニマルクリア通知（約1.5秒間）を表示後、インデックス0（第1音）へ自動ループ復帰
-        console.log(`[SONG COMPLETE] 全${currentSequence.length}音を完走！クリア通知を表示します`);
-        showClearNotification(() => {
-          currentSongStep = 0;
-          noteProgressMap.clear();
-          resetNoteView();
-          const resetTarget = currentSequence[0];
-          setTargetFinger(resetTarget.fingerKey);
-          renderSongGuideUI();
-          console.log(`[SONG LOOP] 第1音 (${resetTarget.note} / ${resetTarget.fingerKey}) へリセット完了`);
-        });
-      } else {
-        // 通常進行：次の音符へステップ進行
-        currentSongStep = currentSongStep + 1;
-        const nextTarget = currentSequence[currentSongStep];
-
-        // 次のターゲット指へ自動切り替えとガイド更新
-        setTargetFinger(nextTarget.fingerKey);
-        renderSongGuideUI();
-      }
+      songHit("camera", `色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}, vy=${tipVy.toFixed(1)} >= V_TH:${hitVyThreshold}`);
     }
   } else if (tapState === "TOUCHED") {
     // 打鍵で対象指が次の指に切り替わった場合は、新しい指の現在位置から最下点の記録を始める
@@ -4005,6 +4101,53 @@ if (recordSlot) {
     // カメラ起動済みなら、今の曲を最初からカウントダウン付きで始め直す（起動前ならスタート時に記録開始）
     if (isPredicting) selectSong(currentSongId, true);
   });
+}
+
+// マイクで鳴らす：机を叩いた音を聞いた瞬間に発音する（カメラの判定では鳴らさない）
+const micSlot = document.getElementById("sp-mic-slot");
+if (micSlot) {
+  const micBtn = document.createElement("button");
+  micBtn.id = "mic-trigger-btn";
+  micBtn.type = "button";
+  micBtn.className = "sp-row sp-toggle";
+  micBtn.setAttribute("aria-pressed", "false");
+  micBtn.innerHTML = `<span data-label>マイクで鳴らす（机の音で発音）</span><span class="sp-switch" aria-hidden="true"></span>`;
+  const label = micBtn.querySelector("[data-label]");
+  micBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    ensureAudioContext();
+    if (micTriggerOn) {
+      micTriggerOn = false;
+      releaseMic("trigger");
+      label.textContent = "マイクで鳴らす（机の音で発音）";
+    } else {
+      label.textContent = "マイクを準備しています…";
+      const ok = await acquireMic("trigger");
+      micTriggerOn = ok;
+      tapState = "IDLE";
+      label.textContent = ok ? "マイクで鳴らす（机の音で発音）" : "マイクを使えませんでした（許可を確認）";
+    }
+    micBtn.setAttribute("aria-pressed", String(micTriggerOn));
+  });
+  micSlot.appendChild(micBtn);
+}
+
+// データを集める（datalog.js）：カメラの関節座標・机の音・録音・発音を記録して書き出す
+const dataLogSlot = document.getElementById("sp-datalog-slot");
+if (dataLogSlot) {
+  setupDataLogButton(dataLogSlot, () => {
+    const track = currentStream && currentStream.getVideoTracks ? currentStream.getVideoTracks()[0] : null;
+    return {
+      song: currentSongId,
+      freePlay: isFreePlay(),
+      micTrigger: micTriggerOn,
+      video: { width: video.videoWidth, height: video.videoHeight, settings: track && track.getSettings ? track.getSettings() : null },
+      thresholds: JSON.parse(JSON.stringify(fingerThresholdModels)),
+      vyThresholds: { ...FINGER_VY_THRESHOLDS },
+      filter: { minCutoff: 1.2, beta: 0.008, dCutoff: VELOCITY_CUTOFF_HZ },
+      note: "frames の proc/presentation/capture と knocks の t は performance.now()（ms）"
+    };
+  }, () => setSettingsOpen(false));
 }
 
 // 遅れを測る（latency.js）：机を叩いた音と測定音の時間差をマイクで測る
