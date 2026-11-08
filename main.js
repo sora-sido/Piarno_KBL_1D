@@ -10,6 +10,7 @@ import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
 import { setupRecordButton, onPlayStart, onHit as onRecordHit, recordFrame, isRecording } from "./recorder.js";
 import { startPositioning, updatePositioning, isPositioning, evaluateDrift, directionGraphic } from "./positioning.js";
+import { setupLatencyButton, isLatencyMode, onLatencyTap } from "./latency.js";
 
 // 打鍵→発音の遅延対策：Tone.js は時刻未指定の発音を既定で lookAhead（0.1秒）後に予約するため、
 // 0 にして打鍵判定と同じ瞬間に鳴らす（リアルタイム演奏用。シーケンス再生はしないので先読みは不要）
@@ -307,6 +308,16 @@ function playSynthFallback(freq = 523.25, duration = 0.8) {
  * @param {object} options 発音オプション { duration: string|number, isBass: boolean }
  */
 export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true, options = {}) {
+  // 遅れの測定中は、打鍵ごとにピアノの代わりに測定音だけを鳴らす（伴奏も鳴らさない）
+  if (isLatencyMode()) {
+    if (countAsTap) {
+      onLatencyTap();
+      tapCount++;
+      if (tapCountVal) tapCountVal.textContent = `${tapCount}`;
+    }
+    return;
+  }
+
   // 配列が渡された場合は和音（各構成音）として自然に同時発音
   if (Array.isArray(targetFreqOrNote)) {
     targetFreqOrNote.forEach((note) => {
@@ -3994,6 +4005,12 @@ if (recordSlot) {
     // カメラ起動済みなら、今の曲を最初からカウントダウン付きで始め直す（起動前ならスタート時に記録開始）
     if (isPredicting) selectSong(currentSongId, true);
   });
+}
+
+// 遅れを測る（latency.js）：机を叩いた音と測定音の時間差をマイクで測る
+const latencySlot = document.getElementById("sp-latency-slot");
+if (latencySlot) {
+  setupLatencyButton(latencySlot, () => ensureAudioContext(), () => setSettingsOpen(false));
 }
 
 // 手の位置合わせをやり直す

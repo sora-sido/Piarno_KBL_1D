@@ -1337,3 +1337,87 @@ body.positioning .song-progress-bar {
 .song-progress-badge .badge-song {
   margin-right: 0;
 }
+
+/* ==========================================================================
+   遅れの測定（latency.js）：画面上部の結果パネル
+   ========================================================================== */
+.latency-hud {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(360px, calc(100vw - 24px));
+  background: rgba(16, 18, 24, 0.95);
+  border: 1px solid #2c3440;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  padding: 10px 14px 12px;
+  color: #e8ecf2;
+  display: grid;
+  gap: 6px;
+  z-index: 470;
+}
+.latency-hud[hidden] {
+  display: none;
+}
+.lh-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.lh-title {
+  font-size: 12px;
+  color: #9aa4b4;
+  letter-spacing: 0.04em;
+}
+.lh-close {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid #3a4352;
+  background: transparent;
+  color: #e8ecf2;
+  cursor: pointer;
+}
+.lh-close:focus-visible {
+  outline: 2px solid #56b4e9;
+  outline-offset: 2px;
+}
+.lh-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.lh-label {
+  font-size: 12px;
+  color: #9aa4b4;
+}
+.lh-value {
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.lh-sub {
+  font-size: 12px;
+  color: #9aa4b4;
+}
+.lh-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 13px;
+  color: #9aa4b4;
+  font-variant-numeric: tabular-nums;
+}
+.lh-list .latest {
+  color: #e8ecf2;
+  font-weight: 700;
+}
+.lh-msg {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9aa4b4;
+}
