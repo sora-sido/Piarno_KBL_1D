@@ -4,7 +4,7 @@
  * - 音の処理専用のスレッド（AudioWorklet）で 128 サンプル（48kHz で約 2.7ms）ごとに音を見張り、
  *   急に大きくなった瞬間（机を叩いた音）を見つけたらすぐ知らせる
  * - データ記録用に、マイクの録音と「マイクのサンプル位置 ↔ performance.now()」の対応も渡す
- * - アプリ自身が鳴らした音をマイクが拾って打鍵と間違えないよう、音を鳴らした直後の一定時間は「発音に使わない」印を付ける
+ * - アプリ自身が鳴らした音をマイクが拾ったものと見分けられるよう、音を鳴らした直後の一定時間に見つけた音には印（masked）を付ける
  */
 
 const WORKLET_SRC = `
@@ -74,12 +74,12 @@ const mic = {
   node: null,
   sr: 48000,
   starting: null,
-  users: new Set(),        // マイクを使っている機能（"trigger" / "log"）
+  users: new Set(),        // マイクを使っている機能（"log" など）
   knockListeners: new Set(),
   pcmListeners: new Set(),
   clockListeners: new Set(),
   lastSoundAt: -Infinity,  // アプリが最後に音を鳴らした時刻（performance.now）
-  maskMs: 110,             // 音を鳴らしてからこの時間は、マイクが拾った音を打鍵とみなさない
+  maskMs: 110,             // 音を鳴らしてからこの時間に見つけた音には印を付ける
   lastClock: null          // { f, perf } 直近の「サンプル位置 ↔ 時刻」
 };
 
@@ -91,7 +91,7 @@ export function isMicRunning() {
   return !!mic.node;
 }
 
-/** アプリが音を鳴らしたことを知らせる（自分の音で打鍵と誤判定しないため） */
+/** アプリが音を鳴らしたことを知らせる（自分の音を拾ったものに印を付けるため） */
 export function notifySoundPlayed() {
   mic.lastSoundAt = performance.now();
 }
