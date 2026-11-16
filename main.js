@@ -8,8 +8,8 @@
 
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
-import { TapDetector } from "./tap-detector.js";
-import { FINGER_NAMES, FINGER_CONFIGS, FINGER_VY_THRESHOLDS } from "./finger-config.js";
+import { TapDetector, STROKE_ONSET_RY, STROKE_MIN_VELOCITY } from "./tap-detector.js";
+import { FINGER_NAMES, FINGER_CONFIGS } from "./finger-config.js";
 import { parseCsv, deriveFingerThreshold } from "./threshold-model.js";
 
 // DOM要素
@@ -726,8 +726,9 @@ export function updateCachedConnections(fingerKey) {
   currentOtherConnections = connections;
 }
 
-// 指ごとの学習閾値モデル
-// 速度ゲート（下降速度 vy）を併用するため、静止待機誤爆を心配せず変位閾値を浅く緩和して軽いタッチを確実に検知
+// 指ごとの学習閾値モデル（CSV から導出）
+// ※現在の打鍵判定（tap-detector.js）は「沈み込み量」と「付け根に対する相対速度」で行うため、
+//   この学習値は判定に使っていない。ログでの参考表示のみ
 export const fingerThresholdModels = {
   THUMB: { hitRy: 0.35, liftRy: 0.28, samples: 0 },
   MIDDLE: { hitRy: 0.60, liftRy: 0.52, samples: 0 },
@@ -760,7 +761,7 @@ export function setTargetFinger(fingerKey) {
   // 指別学習モデルの閾値を適用
   applyFingerThreshold(fingerKey);
 
-  console.log(`[FINGER TARGET] ターゲット指: ${FINGER_CONFIGS[fingerKey].label} (TH: ${hitRyThreshold.toFixed(2)})`);
+  console.log(`[FINGER TARGET] ターゲット指: ${FINGER_CONFIGS[fingerKey].label} (学習 hitRy 参考値: ${hitRyThreshold.toFixed(2)})`);
 }
 
 // 初回ターゲット指の骨格接続線を初期化
@@ -1158,12 +1159,12 @@ export function applyFingerThreshold(fingerKey) {
     liftRyThreshold = model.liftRy;
     trainedHitSamples = model.samples;
   }
+  // HUD には実際の判定に使う閾値（沈み込み量と相対速度の下限）を表示
   if (thVal) {
-    thVal.textContent = hitRyThreshold.toFixed(2);
+    thVal.textContent = STROKE_ONSET_RY.toFixed(2);
   }
   if (vThVal) {
-    const vyTh = FINGER_VY_THRESHOLDS[fingerKey] || 200;
-    vThVal.textContent = `${vyTh}`;
+    vThVal.textContent = STROKE_MIN_VELOCITY.toFixed(1);
   }
 }
 
@@ -1245,7 +1246,7 @@ function ingestCsvFiles(files) {
     );
   } else {
     updateCsvStatus("NOT LOADED");
-    if (thVal) thVal.textContent = hitRyThreshold.toFixed(2);
+    if (thVal) thVal.textContent = STROKE_ONSET_RY.toFixed(2);
   }
 }
 
@@ -1915,7 +1916,7 @@ function processVideoFrame(frameTime) {
   }
 
   // 生ランドマーク座標の直接描画
-  drawRawHandLandmarks(results);
+  drawRawHandLandmarks(results, timestampMs);
 
   // FPS更新
   updateFps();
@@ -1930,7 +1931,9 @@ function schedulePredictLoop() {
 
   if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
     video.requestVideoFrameCallback((now, metadata) => {
-      const frameTime = (metadata && metadata.presentationTime) ? metadata.presentationTime * 1000 : now;
+      // フレームの時刻（ms）。カメラの撮影時刻が取れればそれを、無ければ表示時刻を使う
+      // （どちらも performance.now() と同じミリ秒の時間軸）
+      const frameTime = (metadata && (metadata.captureTime || metadata.presentationTime)) || now;
       processVideoFrame(frameTime);
       schedulePredictLoop();
     });
@@ -2090,16 +2093,16 @@ function selectRightHandLandmarks(results) {
 
 /**
  * 1 フレーム分の右手選択・打鍵判定・骨格描画
- * 平滑化・特徴量（ry / tipVy）算出・打鍵ステート更新は tapDetector（tap-detector.js）が担当し、
+ * 平滑化・特徴量の算出・打鍵ステート更新は tapDetector（tap-detector.js）が担当し、
  * ここでは HIT 時の発音・演出・楽曲進行と描画を行う
  * @param {object} results
+ * @param {number} frameTimeMs このフレームの時刻（ms・単調増加）。速度の計算に使う
  */
-function drawRawHandLandmarks(results) {
+function drawRawHandLandmarks(results, frameTimeMs) {
   canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
   const fingerConfig = FINGER_CONFIGS[currentFingerKey] || FINGER_CONFIGS.THUMB;
-  const now = performance.now();
-  const hitVyThreshold = FINGER_VY_THRESHOLDS[currentFingerKey] || 200;
+  const now = typeof frameTimeMs === "number" ? frameTimeMs : performance.now();
 
   // 位置連続性による右手セレクターを実行（左手は完全除外）
   const selectedRightHand = selectRightHandLandmarks(results);
@@ -2116,9 +2119,6 @@ function drawRawHandLandmarks(results) {
     width: canvas.width,
     height: canvas.height,
     fingerKey: currentFingerKey,
-    finger: fingerConfig,
-    hitRy: hitRyThreshold,
-    vyTh: hitVyThreshold,
     gateOpen: !isCountingDown && !isClearing
   });
 
@@ -2157,7 +2157,7 @@ function drawRawHandLandmarks(results) {
   currentTip.y = smoothTip.y;
 
   const currentRy = frame.ry;
-  const tipVy = frame.vy;
+  const tipVy = frame.vel;
 
   if (frame.event === "HIT") {
     // 該当指先でノーツHIT弾けエフェクトを発火
@@ -2192,7 +2192,7 @@ function drawRawHandLandmarks(results) {
     lastShownTapState = "TOUCHED";
 
     console.log(
-      `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}, vy=${tipVy.toFixed(0)} >= V_TH:${hitVyThreshold}${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
+      `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(2)} 沈み込み=${frame.stroke.toFixed(2)} >= ${STROKE_ONSET_RY}, 速度=${tipVy.toFixed(1)} >= ${STROKE_MIN_VELOCITY} [L/s]${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
     );
 
     const isLastStep = currentSongStep === currentSequence.length - 1;
@@ -2355,7 +2355,7 @@ function updateDebugMetrics(x, y, ry, vy = 0) {
     relYVal.textContent = ry !== undefined && ry !== null ? (ry >= 0 ? `+${ry.toFixed(2)}` : ry.toFixed(2)) : "-";
   }
   if (velYVal) {
-    velYVal.textContent = vy !== undefined && vy !== null ? (vy >= 0 ? `+${vy.toFixed(0)}` : vy.toFixed(0)) : "-";
+    velYVal.textContent = vy !== undefined && vy !== null ? (vy >= 0 ? `+${vy.toFixed(1)}` : vy.toFixed(1)) : "-";
   }
 }
 

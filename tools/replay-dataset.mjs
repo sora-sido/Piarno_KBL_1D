@@ -4,7 +4,6 @@
  *
  * public/dataset/ の CSV（指先・付け根・手首の座標を持つ形式）を 1 フレームずつ
  * アプリと同じ判定コード（tap-detector.js）に通し、打鍵の検出率と誤検知数を数える。
- * 閾値もアプリと同じ手順（threshold-model.js）で CSV から導出する。
  *
  *   node tools/replay-dataset.mjs            # 表を表示
  *   node tools/replay-dataset.mjs --json     # JSON で出力
@@ -16,8 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { TapDetector } from "../tap-detector.js";
-import { parseCsv, deriveFingerThreshold } from "../threshold-model.js";
-import { FINGER_CONFIGS, FINGER_VY_THRESHOLDS } from "../finger-config.js";
+import { FINGER_CONFIGS } from "../finger-config.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DATASET_DIR = path.join(ROOT, "public", "dataset");
@@ -108,7 +106,7 @@ function matchEvents(labels, hits) {
 }
 
 /** 1 本の録画を判定器に通し、HIT の時刻を返す */
-function replay(frames, fingerKey, model) {
+function replay(frames, fingerKey) {
   const cfg = FINGER_CONFIGS[fingerKey];
   const detector = new TapDetector(process.env.DET_OPT ? JSON.parse(process.env.DET_OPT) : {});
   const hits = [];
@@ -129,9 +127,6 @@ function replay(frames, fingerKey, model) {
       width: REC_WIDTH * scale,
       height: REC_HEIGHT * scale,
       fingerKey,
-      finger: cfg,
-      hitRy: model.hitRy,
-      vyTh: FINGER_VY_THRESHOLDS[fingerKey],
       gateOpen: true
     });
     if (r.event === "HIT") hits.push(f.t);
@@ -139,29 +134,15 @@ function replay(frames, fingerKey, model) {
   return hits;
 }
 
-// ---- データセット読込（アプリの loadTestDataCsv と同じ分類） ----
+// ---- データセット読込 ----
 const manifest = JSON.parse(fs.readFileSync(path.join(DATASET_DIR, "manifest.json"), "utf8"));
 const fileList = manifest.fingers ? Object.values(manifest.fingers).flat() : manifest.files || manifest;
-const quietLog = console.log;
-console.log = () => {}; // parseCsv のピーク検出ログを抑止
-const datasetsByFinger = {};
 const recordings = [];
 for (const fname of fileList) {
   const text = fs.readFileSync(path.join(DATASET_DIR, fname), "utf8");
   const display = fname.includes("/") ? fname.split("/").pop() : fname;
-  const fingerKey = detectFingerKey(fname);
-  const parsed = parseCsv(text, display);
-  if (parsed.length > 0) {
-    (datasetsByFinger[fingerKey] ||= []).push({ filename: display, frames: parsed });
-  }
   const frames = loadFrames(text);
-  if (frames) recordings.push({ fingerKey, kind: fileKind(display), name: fname, frames });
-}
-console.log = quietLog;
-
-const models = {};
-for (const k of Object.keys(datasetsByFinger)) {
-  models[k] = deriveFingerThreshold(datasetsByFinger[k], k);
+  if (frames) recordings.push({ fingerKey: detectFingerKey(fname), kind: fileKind(display), name: fname, frames });
 }
 
 // ---- 再生 ----
@@ -169,8 +150,7 @@ const rows = [];
 const total = { labels: 0, tp: 0, miss: 0, extra: 0, doubles: 0 };
 const negatives = {};
 for (const rec of recordings) {
-  const model = models[rec.fingerKey];
-  const hits = replay(rec.frames, rec.fingerKey, model);
+  const hits = replay(rec.frames, rec.fingerKey);
   const durationSec = (rec.frames[rec.frames.length - 1].t - rec.frames[0].t) / 1000;
   if (rec.kind === "tap") {
     const labels = labelEvents(rec.frames);
@@ -193,17 +173,13 @@ const recall = total.labels ? total.tp / total.labels : 0;
 const falsePerMin = Object.fromEntries(
   Object.entries(negatives).map(([k, v]) => [k, (v.hits / v.durationSec) * 60])
 );
-const summary = { scale, models, total: { ...total, recall }, negatives, falsePerMin, rows };
+const summary = { scale, total: { ...total, recall }, negatives, falsePerMin, rows };
 
 if (asJson) {
   process.stdout.write(JSON.stringify(summary, null, 2) + "\n");
 } else {
   const pad = (s, n) => String(s).padStart(n);
   console.log(`座標スケール: ${scale}`);
-  console.log("閾値（CSV から導出）:");
-  for (const [k, m] of Object.entries(models)) {
-    console.log(`  ${k.padEnd(7)} hitRy=${m.hitRy.toFixed(2)} liftRy=${m.liftRy.toFixed(2)} vyTH=${FINGER_VY_THRESHOLDS[k]} 打鍵サンプル=${m.samples}`);
-  }
   console.log("\n指      種類    秒数  打鍵  検出  一致  漏れ  余分  二重");
   for (const r of rows) {
     if (r.kind === "tap") {
