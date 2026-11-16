@@ -11,6 +11,7 @@ import * as Tone from "tone";
 import { TapDetector, STROKE_ONSET_RY, STROKE_MIN_VELOCITY } from "./tap-detector.js";
 import { FINGER_NAMES, FINGER_CONFIGS } from "./finger-config.js";
 import { parseCsv, deriveFingerThreshold } from "./threshold-model.js";
+import { LandmarkRecorder } from "./recorder.js";
 
 // DOM要素
 const video = document.getElementById("webcam");
@@ -180,6 +181,8 @@ let trainedHitSamples = 0;
 
 // 打鍵判定器（平滑化・特徴量算出・打鍵ステートマシンを担当。詳細は tap-detector.js）
 const tapDetector = new TapDetector();
+// 検証用データの録画（URL に ?record を付けたときだけパネルを表示。詳細は recorder.js）
+const recorder = new LandmarkRecorder();
 // HUD に最後に表示した対象指の打鍵ステート（変化したときだけ HUD を書き換える）
 let lastShownTapState = "IDLE";
 
@@ -1354,6 +1357,7 @@ async function init() {
  */
 function prepareApp() {
   resetDebugMetrics();
+  recorder.mount();
   updateStatus("曲を選択してください");
 
   // テスト用CSVの非同期読み込み（未配置でもブロックせず実行）
@@ -2112,14 +2116,27 @@ function drawRawHandLandmarks(results, frameTimeMs) {
   // ※HIT でステップが進む前の色を、このフレームの描画とログに使う
   const targetColor = getTargetFingerColor(currentSongStep);
 
+  // 検証用データの録画中は、選択された右手の生ランドマークをそのまま記録
+  if (recorder.isRecording) {
+    recorder.onFrame({
+      t: now,
+      hand: selectedRightHand,
+      handsDetected: results && results.landmarks ? results.landmarks.length : 0,
+      width: canvas.width,
+      height: canvas.height,
+      targetFinger: currentFingerKey,
+      step: currentSongStep
+    });
+  }
+
   // 平滑化・特徴量算出・打鍵ステート更新
-  // カウントダウン中（3・2・1）と完走クリア演出中は gateOpen=false で HIT を判定しない
+  // カウントダウン中（3・2・1）、完走クリア演出中、録画中は gateOpen=false で HIT を判定しない
   const frame = tapDetector.update(selectedRightHand, {
     now,
     width: canvas.width,
     height: canvas.height,
     fingerKey: currentFingerKey,
-    gateOpen: !isCountingDown && !isClearing
+    gateOpen: !isCountingDown && !isClearing && !recorder.isRecording
   });
 
   if (frame.tracking === "LOST") {
