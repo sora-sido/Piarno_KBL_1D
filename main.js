@@ -8,6 +8,9 @@
 
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
+import { TapDetector } from "./tap-detector.js";
+import { FINGER_NAMES, FINGER_CONFIGS, FINGER_VY_THRESHOLDS } from "./finger-config.js";
+import { parseCsv, deriveFingerThreshold } from "./threshold-model.js";
 
 // DOM要素
 const video = document.getElementById("webcam");
@@ -175,8 +178,8 @@ let hitRyThreshold = 0.70;
 let liftRyThreshold = 0.45;
 let trainedHitSamples = 0;
 
-// 打鍵ステートマシン管理（IDLE: 待機, TOUCHED: 机面接触中・リフト待ち）
-let tapState = "IDLE";
+// 打鍵判定器（平滑化・特徴量算出・打鍵ステートマシンを担当。詳細は tap-detector.js）
+const tapDetector = new TapDetector();
 
 // 画面自動消灯防止（Screen Wake Lock API）の管理用センチネル
 let wakeLockSentinel = null;
@@ -356,201 +359,6 @@ let frameCount = 0;
 export const currentTip = {
   x: 0,
   y: 0
-};
-
-/**
- * 1 Euro Filter（ワンユーロフィルター）
- * 低速時はジッター（微小な震え）を完全に平滑化し、高速打鍵時は遅延ゼロで追従する標準適応フィルター
- */
-class OneEuroFilter {
-  constructor(minCutoff = 1.2, beta = 0.008, dCutoff = 1.0) {
-    this.minCutoff = minCutoff;
-    this.beta = beta;
-    this.dCutoff = dCutoff;
-    this.xPrev = null;
-    this.dxPrev = 0;
-    this.tPrev = null;
-  }
-
-  reset(x = null, timestamp = null) {
-    this.xPrev = x;
-    this.dxPrev = 0;
-    this.tPrev = timestamp;
-  }
-
-  alpha(cutoff, dt) {
-    const tau = 1.0 / (2 * Math.PI * cutoff);
-    return 1.0 / (1.0 + tau / dt);
-  }
-
-  filter(x, timestamp = performance.now()) {
-    if (this.xPrev === null || this.tPrev === null) {
-      this.xPrev = x;
-      this.dxPrev = 0;
-      this.tPrev = timestamp;
-      return x;
-    }
-
-    const dt = Math.max((timestamp - this.tPrev) / 1000, 0.001);
-    this.tPrev = timestamp;
-
-    // 速度（1階差分）の平滑化
-    const dx = (x - this.xPrev) / dt;
-    const aD = this.alpha(this.dCutoff, dt);
-    const dxHat = aD * dx + (1 - aD) * this.dxPrev;
-    this.dxPrev = dxHat;
-
-    // 速度に応じた動的カットオフ周波数（素早い動きでは自動で高くなり遅延ゼロ）
-    const cutoff = this.minCutoff + this.beta * Math.abs(dxHat);
-    const a = this.alpha(cutoff, dt);
-
-    // 信号の平滑化
-    const xHat = a * x + (1 - a) * this.xPrev;
-    this.xPrev = xHat;
-
-    return xHat;
-  }
-}
-
-/**
- * 2D関節座標用 1 Euro Filter
- */
-class PointFilter {
-  constructor(minCutoff = 1.2, beta = 0.008) {
-    this.xf = new OneEuroFilter(minCutoff, beta);
-    this.yf = new OneEuroFilter(minCutoff, beta);
-  }
-
-  reset(x = null, y = null, timestamp = null) {
-    this.xf.reset(x, timestamp);
-    this.yf.reset(y, timestamp);
-  }
-
-  /**
-   * 過去座標からの引きずりをバイパスし、指定座標で即座にスナップ初期化
-   * @param {number} x
-   * @param {number} y
-   * @param {number} timestamp
-   * @param {object} out
-   */
-  snap(x, y, timestamp, out = null) {
-    this.reset(x, y, timestamp);
-    if (out) {
-      out.x = x;
-      out.y = y;
-      return out;
-    }
-    return {
-      x,
-      y
-    };
-  }
-
-  filter(x, y, timestamp, out = null) {
-    const fx = this.xf.filter(x, timestamp);
-    const fy = this.yf.filter(y, timestamp);
-    if (out) {
-      out.x = fx;
-      out.y = fy;
-      return out;
-    }
-    return {
-      x: fx,
-      y: fy
-    };
-  }
-
-  /**
-   * 平滑化されたY軸下降速度（ピクセル/秒）を取得
-   * 下向き移動時は正の値（> 0）、上向き移動時は負の値（< 0）
-   * @returns {number}
-   */
-  getVelocityY() {
-    return this.yf.dxPrev;
-  }
-}
-
-// 日本語指名マッピング（本システムは右手のみでの演奏を前提）
-export const FINGER_NAMES = {
-  THUMB: "親指",
-  INDEX: "人差し指",
-  MIDDLE: "中指",
-  RING: "薬指",
-  PINKY: "小指"
-};
-
-// 対象指の定義（右手 親指〜小指までの全指・ハ長調基本ポジション C5〜G5）
-export const FINGER_CONFIGS = {
-  THUMB: {
-    fingerNum: 1,
-    key: "THUMB",
-    hand: "右手",
-    shortName: "親指",
-    label: "右手 親指 (1: ド)",
-    freq: 523.25, // C5 (ド)
-    baseIdx: 2,   // MCP (付け根)
-    p1Idx: 1,     // CMC
-    p2Idx: 2,     // MCP
-    p3Idx: 3,     // IP
-    tipIdx: 4,    // TIP
-    indices: [1, 2, 3, 4]
-  },
-  INDEX: {
-    fingerNum: 2,
-    key: "INDEX",
-    hand: "右手",
-    shortName: "人差し指",
-    label: "右手 人差し指 (2: レ)",
-    freq: 587.33, // D5 (レ)
-    baseIdx: 5,   // MCP
-    p1Idx: 5,     // MCP
-    p2Idx: 6,     // PIP
-    p3Idx: 7,     // DIP
-    tipIdx: 8,    // TIP
-    indices: [5, 6, 7, 8]
-  },
-  MIDDLE: {
-    fingerNum: 3,
-    key: "MIDDLE",
-    hand: "右手",
-    shortName: "中指",
-    label: "右手 中指 (3: ミ)",
-    freq: 659.25, // E5 (ミ)
-    baseIdx: 9,   // MCP
-    p1Idx: 9,     // MCP
-    p2Idx: 10,    // PIP
-    p3Idx: 11,    // DIP
-    tipIdx: 12,   // TIP
-    indices: [9, 10, 11, 12]
-  },
-  RING: {
-    fingerNum: 4,
-    key: "RING",
-    hand: "右手",
-    shortName: "薬指",
-    label: "右手 薬指 (4: ファ)",
-    freq: 698.46, // F5 (ファ)
-    baseIdx: 13,  // MCP
-    p1Idx: 13,    // MCP
-    p2Idx: 14,    // PIP
-    p3Idx: 15,    // DIP
-    tipIdx: 16,   // TIP
-    indices: [13, 14, 15, 16]
-  },
-  PINKY: {
-    fingerNum: 5,
-    key: "PINKY",
-    hand: "右手",
-    shortName: "小指",
-    label: "右手 小指 (5: ソ)",
-    freq: 783.99, // G5 (ソ)
-    baseIdx: 17,  // MCP
-    p1Idx: 17,    // MCP
-    p2Idx: 18,    // PIP
-    p3Idx: 19,    // DIP
-    tipIdx: 20,   // TIP
-    indices: [17, 18, 19, 20]
-  }
 };
 
 // 『よろこびのうた（Ode to Joy）』運指・音名シーケンス定義（右手5音固定 C5〜G5・楽譜通りの左手自動伴奏 G2〜C4・全16小節/62音）
@@ -737,7 +545,7 @@ export function startCountdown(callback) {
     countdownTimerId = null;
   }
   isCountingDown = true;
-  tapState = "IDLE";
+  tapDetector.resetTapState();
   updateStateHud("COUNTDOWN", false);
 
   const overlay = document.getElementById("countdown-overlay");
@@ -874,23 +682,8 @@ export function selectSong(songId, withCountdown = true) {
   }
 }
 
-// 手の全21ランドマーク専用の適応平滑化フィルター（1 Euro Filter）
-// 手首（0）から親指・人差し指・中指・薬指・小指（20）まで全関節を独立して常時平滑化
-const landmarkFilters = Array.from({ length: 21 }, () => new PointFilter(1.2, 0.008));
-
-// 全21関節点用の平滑化座標オブジェクトプール（毎フレームの新規オブジェクト生成・破棄によるGCスパイクを完全排除）
-const smoothedLandmarksPool = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
-
-// 一時的な検出ロスト対策（打鍵時の陰影による瞬断で骨格が点滅・ジャンプするのを防止しつつ、退出時は約0.1秒で即消去）
-let lostFrames = 0;
-const MAX_LOST_FRAMES = 6;
-let hasValidSmoothedLandmarks = false;
-let lastRawLandmarks = null;
-
 // 右手トラッキングロック用：追従中の右手手首（Landmark 0）の正規化座標
 let lastTrackedWrist = null;
-// 平滑化対象指の切り替え検知用（指変更時にスナップ初期化）
-let lastFilteredFingerKey = null;
 
 // 手の骨格コネクション定義（全21ランドマーク間の接続ペア [startIdx, endIdx]）
 const HAND_CONNECTIONS = [
@@ -929,16 +722,6 @@ export function updateCachedConnections(fingerKey) {
   cachedOtherConnections[fingerKey] = connections;
   currentOtherConnections = connections;
 }
-
-// 指ごとの推奨平滑化下降速度閾値（ピクセル/秒）
-// 打鍵時は急峻な下降（300〜1600 px/s）が発生し、静止待機時（0〜8 px/s）を完全に遮断
-export const FINGER_VY_THRESHOLDS = {
-  THUMB: 160,
-  INDEX: 220,
-  MIDDLE: 220,
-  RING: 180,
-  PINKY: 180
-};
 
 // 指ごとの学習閾値モデル
 // 速度ゲート（下降速度 vy）を併用するため、静止待機誤爆を心配せず変位閾値を浅く緩和して軽いタッチを確実に検知
@@ -1393,120 +1176,6 @@ function updateCsvStatus(msg) {
 }
 
 /**
- * CSVテキストをパースして相対変位ryおよび打鍵フラグを抽出
- * （timestamp,rx,ry,rz,vx,vy,vz,label 形式、および frame,timestamp,mcp_x... 形式の両方に対応）
- * @param {string} text CSVテキスト
- * @returns {Array<{ timestamp: number, ry: number, isHit: boolean }>}
- */
-/**
- * CSVテキストをパースして相対変位ryおよび打鍵フラグを抽出
- * （打鍵ラベルが未付与のtapファイルの場合、変位ピークを自動検出して打鍵点として認識）
- * @param {string} text CSVテキスト
- * @param {string} filename ファイル名
- * @returns {Array<{ timestamp: number, ry: number, isHit: boolean }>}
- */
-export function parseCsv(text, filename = "") {
-  if (!text || typeof text !== "string") return [];
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
-
-  const headerLine = lines[0].toLowerCase();
-  const headers = headerLine.split(",").map((h) => h.trim());
-
-  const ryIdx = headers.indexOf("ry");
-  const labelIdx = headers.indexOf("label") !== -1 ? headers.indexOf("label") : headers.indexOf("is_hit");
-  const timeIdx = headers.indexOf("timestamp") !== -1 ? headers.indexOf("timestamp") : (headers.indexOf("timestamp_ms") !== -1 ? headers.indexOf("timestamp_ms") : headers.indexOf("time_sec"));
-
-  const mcpYIdx = headers.indexOf("index_mcp_y") !== -1 ? headers.indexOf("index_mcp_y") : headers.indexOf("mcp_y");
-  const tipYIdx = headers.indexOf("index_tip_y") !== -1 ? headers.indexOf("index_tip_y") : headers.indexOf("tip_y");
-
-  const results = [];
-  let manualHitCount = 0;
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const cols = line.split(",").map((c) => c.trim());
-
-    let ry = null;
-    let isHit = false;
-    let timestamp = 0;
-
-    if (timeIdx !== -1 && cols[timeIdx]) {
-      timestamp = parseFloat(cols[timeIdx]) || 0;
-    }
-
-    if (labelIdx !== -1 && cols[labelIdx]) {
-      isHit = parseInt(cols[labelIdx], 10) === 1;
-      if (isHit) manualHitCount++;
-    }
-
-    if (ryIdx !== -1 && cols[ryIdx] !== undefined && cols[ryIdx] !== "") {
-      ry = parseFloat(cols[ryIdx]);
-    } else if (mcpYIdx !== -1 && tipYIdx !== -1 && cols[mcpYIdx] && cols[tipYIdx]) {
-      const my = parseFloat(cols[mcpYIdx]);
-      const ty = parseFloat(cols[tipYIdx]);
-      if (!isNaN(my) && !isNaN(ty)) {
-        ry = ty - my;
-      }
-    }
-
-    if (ry !== null && !isNaN(ry)) {
-      results.push({
-        timestamp,
-        ry,
-        isHit
-      });
-    }
-  }
-
-  // もしファイル名に "tap" が含まれており、手動打鍵マークが0件の場合は自動ピーク検出を実行
-  if (filename.toLowerCase().includes("tap") && manualHitCount === 0 && results.length > 10) {
-    autoDetectTapPeaks(results);
-  }
-
-  return results;
-}
-
-/**
- * 打鍵データ波形から机面接触ピーク（極大点）を自動検出して isHit を付与
- * @param {Array<{ timestamp: number, ry: number, isHit: boolean }>} frames
- */
-function autoDetectTapPeaks(frames) {
-  const rys = frames.map((f) => f.ry);
-  const len = rys.length;
-  if (len < 5) return;
-
-  // 全体の平均値と中央値を算出
-  const sortedRys = [...rys].sort((a, b) => a - b);
-  const medianRy = sortedRys[Math.floor(len * 0.5)];
-  const p75Ry = sortedRys[Math.floor(len * 0.75)];
-
-  let lastHitIdx = -100;
-  let autoCount = 0;
-
-  for (let i = 3; i < len - 3; i++) {
-    const cur = rys[i];
-    // 局所極大（前後より高く、かつ75%タイル以上の山）
-    if (
-      cur > rys[i - 1] &&
-      cur >= rys[i + 1] &&
-      cur > rys[i - 2] &&
-      cur >= rys[i + 2] &&
-      cur > p75Ry &&
-      (cur - medianRy) > 0.08 &&
-      (i - lastHitIdx) > 10 // クールダウン（最低10フレーム離れている）
-    ) {
-      frames[i].isHit = true;
-      lastHitIdx = i;
-      autoCount++;
-    }
-  }
-
-  console.log(`[CSV PEAK] 打鍵ピーク自動検出: ${autoCount} 箇所の打鍵点を抽出 (Median=${medianRy.toFixed(2)}, P75=${p75Ry.toFixed(2)})`);
-}
-
-/**
  * 読み込んだ学習済みCSVデータから各指の打鍵判定閾値を自動導出
  */
 function trainModelFromCsv() {
@@ -1519,95 +1188,21 @@ function trainModelFromCsv() {
 }
 
 /**
- * 特定指のデータセットから打鍵閾値を導出（負値変位・各指の可動域に完全対応）
+ * 特定指のデータセットから打鍵閾値を導出して指別モデルへ反映
  * @param {string} fingerKey
  */
 function trainModelForFinger(fingerKey) {
-  const datasets = fingerDatasets[fingerKey] || [];
-  if (datasets.length === 0) return;
-
-  const frames = datasets.flatMap((d) => d.frames);
-  if (frames.length === 0) return;
-
-  // 1. 打鍵データ（isHit = true）の抽出
-  const hitRys = frames
-    .filter((f) => f.isHit && f.ry !== null && !isNaN(f.ry))
-    .map((f) => f.ry)
-    .sort((a, b) => a - b);
-
-  // 2. 空中動作データ（純粋な空中浮遊データ neg_air のみを使用）
-  // ※ neg_idle (静止待機) や neg_slide (スライド) は机面接触を含むため空中基準から除外
-  const airDatasets = datasets.filter((d) => {
-    const fn = d.filename.toLowerCase();
-    return fn.includes("neg_air");
-  });
-
-  let maxAirRy = -Infinity;
-  if (airDatasets.length > 0) {
-    const airFrames = airDatasets.flatMap((d) => d.frames);
-    const validAirRys = airFrames
-      .filter((f) => f.ry !== null && !isNaN(f.ry))
-      .map((f) => f.ry)
-      .sort((a, b) => a - b);
-    if (validAirRys.length > 0) {
-      // 90パーセンタイルを空中最大変位として採用（異常外れ値をカット）
-      maxAirRy = validAirRys[Math.floor(validAirRys.length * 0.90)];
-    }
-  }
-
-  // 空中データが無い場合は打鍵以外のデータの下位70%を参照
-  if (maxAirRy === -Infinity) {
-    const negRys = frames
-      .filter((f) => !f.isHit && f.ry !== null && !isNaN(f.ry))
-      .map((f) => f.ry)
-      .sort((a, b) => a - b);
-    maxAirRy = negRys.length > 0 ? negRys[Math.floor(negRys.length * 0.70)] : 0.0;
-  }
-
-  const samples = hitRys.length;
-  let hitTh = 0.0;
-  let liftTh = 0.0;
-
-  if (samples > 0) {
-    // 打鍵サンプルの中央値・第25%パーセンタイル値
-    const medianHitRy = hitRys[Math.floor(samples * 0.50)];
-    const p25HitRy = hitRys[Math.floor(samples * 0.25)];
-
-    if (medianHitRy > maxAirRy) {
-      // 空中最大と打鍵中央値の中間点に打鍵閾値を設定
-      // 薬指（RING）は他指（中指・小指）との連動によるつられ下がり誤検知を防ぐため、やや高め（0.46）に設定
-      // 親指（THUMB）は机面への垂直変位が小さいため緩和（0.30）して反応感度を向上
-      const hitRatio = fingerKey === "THUMB" ? 0.30 : (fingerKey === "RING" ? 0.46 : 0.45);
-      hitTh = maxAirRy + (medianHitRy - maxAirRy) * hitRatio;
-
-      // 速度ゲートにより机面待機誤爆が防止されているため、浅い打鍵でも確実に反応するよう適正範囲内にクランプ
-      const minHitTh = fingerKey === "THUMB" ? 0.30 : (fingerKey === "PINKY" ? 0.45 : 0.50);
-      hitTh = Math.max(hitTh, minHitTh);
-
-      // リフト閾値：全指で打鍵位置からわずかに指を浮かせるだけで素早くIDLE復帰できるよう、
-      // ヒステリシス幅を極小（0.03）に設定
-      const hysteresis = 0.03;
-      liftTh = hitTh - hysteresis;
-    } else {
-      // 外れ値等で打鍵中央値が空中を下回る場合の適応フォールバック
-      hitTh = p25HitRy;
-      liftTh = hitTh - 0.03;
-    }
-  } else {
-    // 打鍵サンプルが0件の場合の安全マージン（親指は垂直変位が小さいため0.10、薬指は誤検知防止で0.20、他指は0.18）
-    const safetyMargin = fingerKey === "THUMB" ? 0.10 : (fingerKey === "RING" ? 0.20 : 0.18);
-    hitTh = maxAirRy + safetyMargin;
-    liftTh = hitTh - 0.03;
-  }
+  const model = deriveFingerThreshold(fingerDatasets[fingerKey] || [], fingerKey);
+  if (!model) return;
 
   fingerThresholdModels[fingerKey] = {
-    hitRy: parseFloat(hitTh.toFixed(2)),
-    liftRy: parseFloat(liftTh.toFixed(2)),
-    samples
+    hitRy: model.hitRy,
+    liftRy: model.liftRy,
+    samples: model.samples
   };
 
   console.log(
-    `[MODEL: ${fingerKey}] 学習完了: 打鍵=${samples}件 (空中Max=${maxAirRy.toFixed(3)}) -> 打鍵TH=${hitTh.toFixed(2)}, リフトTH=${liftTh.toFixed(2)}`
+    `[MODEL: ${fingerKey}] 学習完了: 打鍵=${model.samples}件 (空中Max=${model.maxAirRy.toFixed(3)}) -> 打鍵TH=${model.hitRy.toFixed(2)}, リフトTH=${model.liftRy.toFixed(2)}`
   );
 }
 
@@ -2491,53 +2086,51 @@ function selectRightHandLandmarks(results) {
 }
 
 /**
- * 手の全21ランドマークの適応平滑化描画、打鍵・リフト用特徴量の算出
- * 手首・手のひら・全指先を独立した 1 Euro Filter で常時平滑化し、ジッターと飛びを完全排除
+ * 1 フレーム分の右手選択・打鍵判定・骨格描画
+ * 平滑化・特徴量（ry / tipVy）算出・打鍵ステート更新は tapDetector（tap-detector.js）が担当し、
+ * ここでは HIT 時の発音・演出・楽曲進行と描画を行う
  * @param {object} results
  */
 function drawRawHandLandmarks(results) {
   canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
   const fingerConfig = FINGER_CONFIGS[currentFingerKey] || FINGER_CONFIGS.THUMB;
-  const targetIndices = fingerConfig.indices;
-  // 演奏判定および骨格描画に必要な関節インデックス（手首 0 ＋ 選択中指の全関節 [p1, p2, p3, tip]）
-  const activeJointIndices = [0, fingerConfig.p1Idx, fingerConfig.p2Idx, fingerConfig.p3Idx, fingerConfig.tipIdx];
-  const width = canvas.width;
-  const height = canvas.height;
   const now = performance.now();
+  const hitVyThreshold = FINGER_VY_THRESHOLDS[currentFingerKey] || 200;
 
   // 位置連続性による右手セレクターを実行（左手は完全除外）
   const selectedRightHand = selectRightHandLandmarks(results);
   const hasHands = selectedRightHand !== null;
 
-  if (!hasHands) {
-    lostFrames++;
-    // 3フレーム以内（約50ms）の一時的ロストであれば直前の平滑化座標で描画を維持し、画面の点滅・ジャンプを防止
-    if (lostFrames <= MAX_LOST_FRAMES && hasValidSmoothedLandmarks) {
-      // 直前フレームの平滑化座標でフィルターを現在タイムスタンプ（now）で空回し更新し、復帰時のdt拡大による速度微分スパイクを防止
-      for (const i of activeJointIndices) {
-        const pt = smoothedLandmarksPool[i];
-        landmarkFilters[i].filter(pt.x, pt.y, now, pt);
-      }
-    } else {
-      if (isDebugPanelVisible) {
-        handsCount.textContent = "0";
-      }
-      if (tapState !== "IDLE") {
-        tapState = "IDLE";
-        updateStateHud("IDLE", false);
-      }
-      // 完全に画角から外れた場合のみフィルターと追従位置をリセット
-      landmarkFilters.forEach((f) => f.reset());
-      hasValidSmoothedLandmarks = false;
-      lastRawLandmarks = null;
-      lastTrackedWrist = null; // ★完全ロスト時は右手トラッキング位置もリセット
-      lastFilteredFingerKey = null; // ★完全ロスト時は平滑化対象指もリセット
-      resetDebugMetrics();
-      return;
+  // 現在のターゲット音符とハイライト色（単発＝水色、連続＝黄色→緑色→青色）
+  // ※HIT でステップが進む前の色を、このフレームの描画とログに使う
+  const targetColor = getTargetFingerColor(currentSongStep);
+
+  // 平滑化・特徴量算出・打鍵ステート更新
+  // カウントダウン中（3・2・1）と完走クリア演出中は gateOpen=false で HIT を判定しない
+  const frame = tapDetector.update(selectedRightHand, {
+    now,
+    width: canvas.width,
+    height: canvas.height,
+    fingerKey: currentFingerKey,
+    finger: fingerConfig,
+    hitRy: hitRyThreshold,
+    liftRy: liftRyThreshold,
+    vyTh: hitVyThreshold,
+    gateOpen: !isCountingDown && !isClearing
+  });
+
+  if (frame.tracking === "LOST") {
+    // 完全に画角から外れた場合：追従位置と HUD をリセット（フィルター・ステートは tapDetector 側でリセット済み）
+    if (isDebugPanelVisible) {
+      handsCount.textContent = "0";
     }
-  } else {
-    lostFrames = 0;
+    if (frame.stateReset) {
+      updateStateHud("IDLE", false);
+    }
+    lastTrackedWrist = null;
+    resetDebugMetrics();
+    return;
   }
 
   if (isDebugPanelVisible) {
@@ -2545,43 +2138,12 @@ function drawRawHandLandmarks(results) {
     handsCount.textContent = hasHands ? `${totalDetected} (右手ロック)` : "1 (補間)";
   }
 
-  // 画面外（完全未検出状態）からの再出現初フレームかどうかを判定
-  const isReacquired = hasHands && !hasValidSmoothedLandmarks;
-
-  // メインの手のランドマーク生座標（右手セレクターで選択された右手のみを供給・左手データは完全破棄）
-  const landmarks = hasHands ? selectedRightHand : lastRawLandmarks;
-  if (!landmarks) return;
-  lastRawLandmarks = landmarks;
-
-  // 追従中の右手手首の生正規化座標で lastTrackedWrist を毎フレーム更新
+  // 追従中の右手手首の生正規化座標で lastTrackedWrist を毎フレーム更新（一時ロスト中は直前の座標）
+  const landmarks = frame.landmarks;
   lastTrackedWrist = { x: landmarks[0].x, y: landmarks[0].y };
 
-  // 演奏・描画に必要な関節点のみ独立平滑化（全21点から5点に絞りフィルタ計算負荷を約76%削減）
-  if (hasHands) {
-    const isFingerChanged = lastFilteredFingerKey !== currentFingerKey;
-    const needSnap = isReacquired || isFingerChanged;
-
-    if (needSnap) {
-      // 画面外復帰または指切り替え初フレーム：過去の古い座標からの引きずりをバイパスし、新座標で即座にスナップ初期化
-      for (const i of activeJointIndices) {
-        const raw = landmarks[i];
-        landmarkFilters[i].snap(raw.x * width, raw.y * height, now, smoothedLandmarksPool[i]);
-      }
-      lastFilteredFingerKey = currentFingerKey;
-    } else {
-      // 通常トラッキング時：適応平滑化（1 Euro Filter）
-      for (const i of activeJointIndices) {
-        const raw = landmarks[i];
-        landmarkFilters[i].filter(raw.x * width, raw.y * height, now, smoothedLandmarksPool[i]);
-      }
-    }
-    hasValidSmoothedLandmarks = true;
-  }
-  const smoothedLandmarks = smoothedLandmarksPool;
-
-  // 1. 対象指以外の骨格・関節点描画は非表示（視覚ノイズ排除および描画負荷削減）
-
-  // 2. 選択中指の平滑化ピクセル座標
+  // 選択中指の平滑化ピクセル座標
+  const smoothedLandmarks = frame.smoothed;
   const smoothP1 = smoothedLandmarks[fingerConfig.p1Idx];
   const smoothP2 = smoothedLandmarks[fingerConfig.p2Idx];
   const smoothP3 = smoothedLandmarks[fingerConfig.p3Idx];
@@ -2591,103 +2153,68 @@ function drawRawHandLandmarks(results) {
   currentTip.x = smoothTip.x;
   currentTip.y = smoothTip.y;
 
-  // 手首（Landmark 0: Wrist）と対象指の付け根（baseIdx）間の平滑化2Dピクセル距離（手の基準長）
-  // ※生のlandmarksやジッターの大きいz深度を完全撤去し、平滑化済み2D座標のみを用いて算出
-  const smoothWrist = smoothedLandmarks[0];
-  const smoothBaseLm = smoothedLandmarks[fingerConfig.baseIdx];
-  const baseDistPx = Math.hypot(smoothBaseLm.x - smoothWrist.x, smoothBaseLm.y - smoothWrist.y);
-  // 画面高の5%を下回らないよう安全最小値を設定して分母微小化スパイクを防止
-  const safeBaseDistPx = Math.max(baseDistPx, height * 0.05);
+  const currentRy = frame.ry;
+  const tipVy = frame.vy;
 
-  // 対象指の基準点ピクセル座標（smoothP2 または smoothP1）
-  const smoothBase = (fingerConfig.baseIdx === fingerConfig.p1Idx) ? smoothP1 : smoothP2;
+  if (frame.event === "HIT") {
+    // 該当指先でノーツHIT弾けエフェクトを発火
+    triggerNoteHitEffect(currentSongStep);
 
-  // 完全平滑化・2Dピクセル比に基づく安定した相対変位 ry
-  const currentRy = (smoothTip.y - smoothBase.y) / safeBaseDistPx;
+    // 右手運指ガイドウィジェットの打鍵フィードバック（一瞬ポップ）
+    const handGuideWidget = document.getElementById("hand-guide-widget");
+    if (handGuideWidget) {
+      handGuideWidget.classList.add("hit-pop");
+      setTimeout(() => {
+        handGuideWidget.classList.remove("hit-pop");
+      }, 160);
+    }
 
-  // 現在のターゲット音符とハイライト色（単発＝水色、連続＝黄色→緑色→青色）
-  const targetColor = getTargetFingerColor(currentSongStep);
+    // 現在の音符を取得
+    const currentTarget = currentSequence[currentSongStep];
 
-  // 対象指先端の平滑化下降速度（ピクセル/秒）を取得（下向き > 0、上向き < 0）
-  const tipFilter = landmarkFilters[fingerConfig.tipIdx];
-  const tipVy = tipFilter ? tipFilter.getVelocityY() : 0;
-  const hitVyThreshold = FINGER_VY_THRESHOLDS[currentFingerKey] || 200;
+    // 右手正解メロディ音を発音（クリアなアタック）
+    playTapSound(currentTarget.rightNote || currentTarget.freq, true, {
+      duration: "2n",
+      isBass: false
+    });
 
-  // 3. レベル2打鍵認識（変位 ＋ 平滑化下降速度ゲートにより机面静止待機誤爆を完全遮断）
-  // カウントダウン中（3・2・1）、完走クリア演出中、および画面外復帰初フレームは打鍵認識を安全にスキップ
-  if (tapState === "IDLE" && !isCountingDown && !isClearing && !isReacquired) {
-    // 平滑化変位が打鍵閾値以上 かつ 下降速度が速度閾値以上（勢いよく振り下ろされた瞬間）
-    if (currentRy >= hitRyThreshold && tipVy >= hitVyThreshold) {
-      tapState = "TOUCHED";
-
-      // 該当指先でノーツHIT弾けエフェクトを発火
-      triggerNoteHitEffect(currentSongStep);
-
-      // 右手運指ガイドウィジェットの打鍵フィードバック（一瞬ポップ）
-      const handGuideWidget = document.getElementById("hand-guide-widget");
-      if (handGuideWidget) {
-        handGuideWidget.classList.add("hit-pop");
-        setTimeout(() => {
-          handGuideWidget.classList.remove("hit-pop");
-        }, 160);
-      }
-
-      // 現在の音符を取得
-      const currentTarget = currentSequence[currentSongStep];
-
-      // 右手正解メロディ音を発音（クリアなアタック）
-      playTapSound(currentTarget.rightNote || currentTarget.freq, true, {
-        duration: "2n",
-        isBass: false
+    // 楽譜通りの左手自動伴奏（単音または和音）が設定されている場合は重ねて自動発音
+    if (currentTarget.autoLeftNote) {
+      playTapSound(currentTarget.autoLeftNote, false, {
+        duration: "1m",
+        isBass: true
       });
+    }
+    updateStateHud("TOUCHED", true);
 
-      // 楽譜通りの左手自動伴奏（単音または和音）が設定されている場合は重ねて自動発音
-      if (currentTarget.autoLeftNote) {
-        playTapSound(currentTarget.autoLeftNote, false, {
-          duration: "1m",
-          isBass: true
-        });
-      }
-      updateStateHud("TOUCHED", true);
+    console.log(
+      `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}, vy=${tipVy.toFixed(0)} >= V_TH:${hitVyThreshold}${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
+    );
 
-      console.log(
-        `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}, vy=${tipVy.toFixed(0)} >= V_TH:${hitVyThreshold}${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
-      );
+    const isLastStep = currentSongStep === currentSequence.length - 1;
 
-      const isLastStep = currentSongStep === currentSequence.length - 1;
-
-      if (isLastStep) {
-        // 完走時：白黒ミニマルクリア通知（約1.5秒間）を表示後、インデックス0（第1音）へ自動ループ復帰
-        console.log(`[SONG COMPLETE] 全${currentSequence.length}音を完走！クリア通知を表示します`);
-        showClearNotification(() => {
-          currentSongStep = 0;
-          noteProgressMap.clear();
-          const resetTarget = currentSequence[0];
-          setTargetFinger(resetTarget.fingerKey);
-          renderSongGuideUI();
-          console.log(`[SONG LOOP] 第1音 (${resetTarget.note} / ${resetTarget.fingerKey}) へリセット完了`);
-        });
-      } else {
-        // 通常進行：次の音符へステップ進行
-        currentSongStep = currentSongStep + 1;
-        const nextTarget = currentSequence[currentSongStep];
-
-        // 次のターゲット指へ自動切り替えとガイド更新
-        setTargetFinger(nextTarget.fingerKey);
+    if (isLastStep) {
+      // 完走時：白黒ミニマルクリア通知（約1.5秒間）を表示後、インデックス0（第1音）へ自動ループ復帰
+      console.log(`[SONG COMPLETE] 全${currentSequence.length}音を完走！クリア通知を表示します`);
+      showClearNotification(() => {
+        currentSongStep = 0;
+        noteProgressMap.clear();
+        const resetTarget = currentSequence[0];
+        setTargetFinger(resetTarget.fingerKey);
         renderSongGuideUI();
-      }
-    }
-  } else if (tapState === "TOUCHED") {
-    // 指のリフト復帰：
-    // 1. 変位がリフト閾値を下回った場合（通常の位置復帰）
-    // 2. または、指先が上向きにリバウンド反転（tipVy <= -100 px/s）し、かつ打鍵変位からわずかに抜けた場合（早期リフト復帰）
-    const isLiftByPosition = currentRy <= liftRyThreshold;
-    const isLiftByRebound = tipVy <= -100 && currentRy <= (hitRyThreshold - 0.02);
+        console.log(`[SONG LOOP] 第1音 (${resetTarget.note} / ${resetTarget.fingerKey}) へリセット完了`);
+      });
+    } else {
+      // 通常進行：次の音符へステップ進行
+      currentSongStep = currentSongStep + 1;
+      const nextTarget = currentSequence[currentSongStep];
 
-    if (isLiftByPosition || isLiftByRebound) {
-      tapState = "IDLE";
-      updateStateHud("IDLE", false);
+      // 次のターゲット指へ自動切り替えとガイド更新
+      setTargetFinger(nextTarget.fingerKey);
+      renderSongGuideUI();
     }
+  } else if (frame.event === "LIFT") {
+    updateStateHud("IDLE", false);
   }
 
   // 4. デバッグHUDのリアルタイム表示更新（平滑化座標、相対変位、下降速度）
@@ -2852,7 +2379,7 @@ function updateStateHud(state, isHitFlash) {
   if (isHitFlash) {
     stateVal.classList.add("spike-highlight");
     setTimeout(() => {
-      if (stateVal && tapState === "TOUCHED") {
+      if (stateVal && tapDetector.getTapState() === "TOUCHED") {
         stateVal.classList.remove("spike-highlight");
       }
     }, 120);
