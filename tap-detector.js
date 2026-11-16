@@ -126,6 +126,19 @@ export const RELEASE_DROP_RY = 0.12;
 // 1 回の打鍵で 2 回鳴る二重検出を防ぐ
 export const RELEASE_MAX_VELOCITY = 0;
 
+// 机面への接触の確認：打鍵の瞬間、指先は手首より下（画面の下側）にある。空中で指を動かしただけの
+// ときは指先が手首より上にあるので、(指先.y − 手首.y) ÷ L がこの値以上のときだけ打鍵とする
+export const CONTACT_MIN = 0.0;
+// 指先そのものが画面上で下降していること：付け根や手首のランドマークが揺れただけでは ry が変化しても
+// 指先は動かない。直近 STROKE_WINDOW_MS の指先の下降量（÷L）と、直近 TIP_SPEED_WINDOW_MS の
+// 指先の最大下降速度（L/秒）に下限を設ける
+export const TIP_STROKE_MIN = 0.15;
+export const TIP_SPEED_MIN = 3.0;
+export const TIP_SPEED_WINDOW_MS = 150;
+// 手を一時的に見失った直後は、戻ったランドマークの位置が飛ぶことがある。
+// 最後に見失ってからこの時間は HIT を判定しない
+export const LOSS_HOLDOFF_MS = 100;
+
 // 連動の抑制：ある指を叩くと隣の指もつられて沈む。対象指は HIT の直後に次の指へ切り替わるので、
 // そのままだと 1 回の打鍵で 2 音進んでしまう。次の 2 つで防ぐ
 // (1) HIT の直後はこの時間だけ次の HIT を受け付けない（つられた指の動きが止まるのを待つ）
@@ -143,6 +156,9 @@ export const MIN_BASE_DIST_RATIO = 0.05;
 // ry とその速度にかける軽い平滑化（1 次ローパス）のカットオフ周波数 [Hz]
 export const FEATURE_CUTOFF_HZ = 6.0;
 export const VELOCITY_CUTOFF_HZ = 6.0;
+// 指先の位置と速度にかける平滑化のカットオフ周波数 [Hz]
+export const TIP_CUTOFF_HZ = 7.0;
+export const TIP_SPEED_CUTOFF_HZ = 8.0;
 
 const FINGER_KEYS = Object.keys(FINGER_CONFIGS);
 
@@ -157,6 +173,8 @@ function lowpassAlpha(cutoffHz, dt) {
  * ry     : 付け根から指先までの縦の差 ÷ 手の基準長 L（下向きが正）。軽く平滑化した値
  * vel    : ry の速度（L/秒、下向きが正）
  * stroke : 直近 STROKE_WINDOW_MS の ry の最小値から、いまどれだけ沈んでいるか
+ * contact: (指先.y − 手首.y) ÷ L。正なら指先が手首より下にある
+ * tipStroke / tipSpeedPeak : 指先そのものの下降量（÷L）と、直近の最大下降速度（L/秒）
  */
 class FingerTracker {
   constructor() {
@@ -175,6 +193,14 @@ class FingerTracker {
     this.prevTime = null;
     this.ryHistory = [];    // { t, v } 直近 STROKE_WINDOW_MS
     this.scaleHistory = []; // { t, v } 直近 SCALE_WINDOW_MS
+    this.contact = 0;
+    this.tipY = null;        // 平滑化した指先の y（px）
+    this.tipSpeed = 0;       // 平滑化した指先の下降速度（px/s）
+    this.prevRawTipY = null;
+    this.tipStroke = 0;
+    this.tipSpeedPeak = 0;
+    this.tipHistory = [];      // { t, v } 直近 STROKE_WINDOW_MS
+    this.tipSpeedHistory = []; // { t, v } 直近 TIP_SPEED_WINDOW_MS
   }
 
   resetState() {
@@ -204,14 +230,37 @@ class FingerTracker {
     if (this.ry === null) {
       this.ry = rawRy;
       this.vel = 0;
+      this.tipY = tip.y;
+      this.tipSpeed = 0;
     } else {
       const dt = Math.max((now - this.prevTime) / 1000, 0.001);
       const rawVel = (rawRy - this.prevRawRy) / dt;
       this.vel += lowpassAlpha(VELOCITY_CUTOFF_HZ, dt) * (rawVel - this.vel);
       this.ry += lowpassAlpha(FEATURE_CUTOFF_HZ, dt) * (rawRy - this.ry);
+      const rawTipSpeed = (tip.y - this.prevRawTipY) / dt;
+      this.tipSpeed += lowpassAlpha(TIP_SPEED_CUTOFF_HZ, dt) * (rawTipSpeed - this.tipSpeed);
+      this.tipY += lowpassAlpha(TIP_CUTOFF_HZ, dt) * (tip.y - this.tipY);
     }
     this.prevRawRy = rawRy;
+    this.prevRawTipY = tip.y;
     this.prevTime = now;
+
+    // 机面への接触の目安：指先が手首よりどれだけ下にあるか
+    this.contact = (tip.y - wrist.y) / this.scale;
+
+    // 指先そのものの下降量と、直近の最大下降速度
+    const th = this.tipHistory;
+    th.push({ t: now, v: this.tipY });
+    while (th.length > 1 && now - th[0].t > STROKE_WINDOW_MS) th.shift();
+    let tipTop = Infinity;
+    for (const e of th) if (e.v < tipTop) tipTop = e.v;
+    this.tipStroke = (this.tipY - tipTop) / this.scale;
+    const ts = this.tipSpeedHistory;
+    ts.push({ t: now, v: this.tipSpeed });
+    while (ts.length > 1 && now - ts[0].t > TIP_SPEED_WINDOW_MS) ts.shift();
+    let speedPeak = -Infinity;
+    for (const e of ts) if (e.v > speedPeak) speedPeak = e.v;
+    this.tipSpeedPeak = speedPeak / this.scale;
 
     // 直近の最小値（谷）からの沈み込み量
     const rh = this.ryHistory;
@@ -240,6 +289,10 @@ export class TapDetector {
       releaseMaxVelocity: RELEASE_MAX_VELOCITY,
       hitLockoutMs: HIT_LOCKOUT_MS,
       dominanceRatio: DOMINANCE_RATIO,
+      contactMin: CONTACT_MIN,
+      tipStrokeMin: TIP_STROKE_MIN,
+      tipSpeedMin: TIP_SPEED_MIN,
+      lossHoldoffMs: LOSS_HOLDOFF_MS,
       ...opt
     };
     // 骨格描画用：手の全21ランドマークの 1 Euro Filter と平滑化座標のオブジェクトプール
@@ -249,6 +302,7 @@ export class TapDetector {
     this.hasValidSmoothed = false;
     this.lastRawLandmarks = null;
     this.lastHitAt = -Infinity;
+    this.lastLossAt = -Infinity;
     // 指ごとの特徴量と打鍵ステート
     this.fingers = {};
     for (const key of FINGER_KEYS) this.fingers[key] = new FingerTracker();
@@ -290,6 +344,7 @@ export class TapDetector {
 
     if (!hasHand) {
       this.lostFrames++;
+      this.lastLossAt = p.now;
       if (this.lostFrames <= MAX_LOST_FRAMES && this.hasValidSmoothed) {
         // 一時ロスト：描画用フィルターを直前の座標で空回しし、復帰時の dt 拡大による飛びを防ぐ。
         // 特徴量は更新しないので、ロスト中に新しい HIT は成立しない
@@ -363,9 +418,13 @@ export class TapDetector {
     const target = this.fingers[p.fingerKey];
     if (
       target.state === "IDLE" && event === null && p.gateOpen && !isReacquired &&
-      p.now - this.lastHitAt >= this.opt.hitLockoutMs
+      p.now - this.lastHitAt >= this.opt.hitLockoutMs &&
+      p.now - this.lastLossAt >= this.opt.lossHoldoffMs
     ) {
-      if (target.stroke >= this.opt.strokeOnsetRy && target.vel >= this.opt.strokeMinVelocity) {
+      const isStroke = target.stroke >= this.opt.strokeOnsetRy && target.vel >= this.opt.strokeMinVelocity;
+      const isTipDescending = target.tipStroke >= this.opt.tipStrokeMin && target.tipSpeedPeak >= this.opt.tipSpeedMin;
+      const isOnDesk = target.contact >= this.opt.contactMin;
+      if (isStroke && isTipDescending && isOnDesk) {
         // ほかの指の最大下降速度（つられた動きかどうかの判定用）
         let maxOtherVel = 0;
         for (const key of FINGER_KEYS) {
