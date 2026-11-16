@@ -180,6 +180,8 @@ let trainedHitSamples = 0;
 
 // 打鍵判定器（平滑化・特徴量算出・打鍵ステートマシンを担当。詳細は tap-detector.js）
 const tapDetector = new TapDetector();
+// HUD に最後に表示した対象指の打鍵ステート（変化したときだけ HUD を書き換える）
+let lastShownTapState = "IDLE";
 
 // 画面自動消灯防止（Screen Wake Lock API）の管理用センチネル
 let wakeLockSentinel = null;
@@ -545,7 +547,8 @@ export function startCountdown(callback) {
     countdownTimerId = null;
   }
   isCountingDown = true;
-  tapDetector.resetTapState();
+  tapDetector.resetTapStates();
+  lastShownTapState = "IDLE";
   updateStateHud("COUNTDOWN", false);
 
   const overlay = document.getElementById("countdown-overlay");
@@ -2115,7 +2118,6 @@ function drawRawHandLandmarks(results) {
     fingerKey: currentFingerKey,
     finger: fingerConfig,
     hitRy: hitRyThreshold,
-    liftRy: liftRyThreshold,
     vyTh: hitVyThreshold,
     gateOpen: !isCountingDown && !isClearing
   });
@@ -2125,8 +2127,9 @@ function drawRawHandLandmarks(results) {
     if (isDebugPanelVisible) {
       handsCount.textContent = "0";
     }
-    if (frame.stateReset) {
+    if (frame.stateReset || lastShownTapState !== "IDLE") {
       updateStateHud("IDLE", false);
+      lastShownTapState = "IDLE";
     }
     lastTrackedWrist = null;
     resetDebugMetrics();
@@ -2186,6 +2189,7 @@ function drawRawHandLandmarks(results) {
       });
     }
     updateStateHud("TOUCHED", true);
+    lastShownTapState = "TOUCHED";
 
     console.log(
       `[SONG HIT] [${SONGS[currentSongId]?.title || ""}] Step ${currentTarget.step}/${currentSequence.length} [右手打鍵] 運指:${currentTarget.fingerNum} (${currentTarget.note}) 色:${targetColor.name} ry=${currentRy.toFixed(3)} >= TH:${hitRyThreshold.toFixed(2)}, vy=${tipVy.toFixed(0)} >= V_TH:${hitVyThreshold}${currentTarget.autoLeftNote ? ` [自動伴奏: ${currentTarget.autoLeftNote}]` : ""}`
@@ -2213,8 +2217,10 @@ function drawRawHandLandmarks(results) {
       setTargetFinger(nextTarget.fingerKey);
       renderSongGuideUI();
     }
-  } else if (frame.event === "LIFT") {
-    updateStateHud("IDLE", false);
+  } else if (frame.state !== lastShownTapState) {
+    // 離鍵したとき、または HIT 後に対象指が切り替わったとき：新しい対象指のステートを HUD に反映
+    updateStateHud(frame.state, false);
+    lastShownTapState = frame.state;
   }
 
   // 4. デバッグHUDのリアルタイム表示更新（平滑化座標、相対変位、下降速度）
@@ -2379,7 +2385,7 @@ function updateStateHud(state, isHitFlash) {
   if (isHitFlash) {
     stateVal.classList.add("spike-highlight");
     setTimeout(() => {
-      if (stateVal && tapDetector.getTapState() === "TOUCHED") {
+      if (stateVal && tapDetector.getTapState(currentFingerKey) === "TOUCHED") {
         stateVal.classList.remove("spike-highlight");
       }
     }, 120);

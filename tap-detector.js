@@ -109,9 +109,12 @@ export class PointFilter {
 // 一時的な検出ロストを直前の平滑化座標で補う最大フレーム数（超えたら全リセット）
 export const MAX_LOST_FRAMES = 6;
 
-// TOUCHED 中の早期リフト復帰（リバウンド）判定：上向き速度と、打鍵閾値からの抜け幅
-export const REBOUND_VY = -100;
-export const REBOUND_RY_MARGIN = 0.02;
+// 離鍵（TOUCHED → IDLE）の条件：打鍵後に到達したピークから ry がこれだけ下がったら離鍵とみなす。
+// 固定の閾値（liftRy）まで戻る必要がないので、指を浅く上げただけの連打でも次の打鍵を受け付ける
+export const RELEASE_DROP_RY = 0.12;
+// 離鍵は指先の下降が止まってから（下降速度がこの値以下）。下降の途中で ry が揺れても離鍵とみなさないので、
+// 1 回の打鍵で 2 回鳴る二重検出を防ぐ
+export const RELEASE_MAX_VY = 0;
 
 // ry の分母（手首〜付け根の距離）の下限：画面高に対する比
 export const MIN_BASE_DIST_RATIO = 0.05;
@@ -122,7 +125,9 @@ export const MIN_BASE_DIST_RATIO = 0.05;
  * update() を毎フレーム 1 回呼ぶ。戻り値の event が "HIT" のフレームで発音・進行を行う。
  */
 export class TapDetector {
-  constructor() {
+  constructor(opt = {}) {
+    // 検証ツールから条件を変えて試せるよう、判定パラメータは上書き可能にしている
+    this.opt = { releaseDropRy: RELEASE_DROP_RY, releaseMaxVy: RELEASE_MAX_VY, ...opt };
     // 手の全21ランドマーク用フィルター（実際に通すのは手首＋対象指4関節の5点のみ）
     this.landmarkFilters = Array.from({ length: 21 }, () => new PointFilter(1.2, 0.008));
     // 平滑化座標のオブジェクトプール（毎フレームの生成・破棄を避ける）
@@ -131,18 +136,34 @@ export class TapDetector {
     this.hasValidSmoothed = false;
     this.lastRawLandmarks = null;
     this.lastFilteredFingerKey = null;
-    // 打鍵ステート（IDLE: 待機, TOUCHED: 机面接触中・リフト待ち）
-    this.tapState = "IDLE";
+    // 指ごとの打鍵ステート（IDLE: 待機, TOUCHED: 机面接触中・リフト待ち）と、打鍵後に到達した ry のピーク
+    this.fingerStates = {};
   }
 
-  /** 打鍵ステートを待機へ戻す（カウントダウン開始時など） */
-  resetTapState() {
-    this.tapState = "IDLE";
+  /** 指の打鍵ステートを取得（無ければ待機で作成） */
+  stateOf(fingerKey) {
+    let st = this.fingerStates[fingerKey];
+    if (!st) {
+      st = { state: "IDLE", peakRy: -Infinity };
+      this.fingerStates[fingerKey] = st;
+    }
+    return st;
   }
 
-  /** 対象指の現在の打鍵ステート */
-  getTapState() {
-    return this.tapState;
+  /** 全指の打鍵ステートを待機へ戻す（カウントダウン開始時など）。TOUCHED の指があったら true */
+  resetTapStates() {
+    let hadTouched = false;
+    for (const st of Object.values(this.fingerStates)) {
+      if (st.state !== "IDLE") hadTouched = true;
+      st.state = "IDLE";
+      st.peakRy = -Infinity;
+    }
+    return hadTouched;
+  }
+
+  /** 指定した指の現在の打鍵ステート */
+  getTapState(fingerKey) {
+    return this.stateOf(fingerKey).state;
   }
 
   /**
@@ -155,11 +176,10 @@ export class TapDetector {
    * @param {string} p.fingerKey 対象指キー
    * @param {object} p.finger 対象指の定義（baseIdx, p1Idx, p2Idx, p3Idx, tipIdx）
    * @param {number} p.hitRy 打鍵閾値
-   * @param {number} p.liftRy リフト閾値
    * @param {number} p.vyTh 下降速度閾値（px/s）
    * @param {boolean} p.gateOpen false の間は HIT を判定しない（カウントダウン・完走演出中）
-   * @returns {{tracking:"LOST"|"HOLD"|"TRACKING", event:"HIT"|"LIFT"|null, landmarks:Array|null,
-   *            isReacquired:boolean, ry:number, vy:number, smoothed:Array, stateReset:boolean}}
+   * @returns {{tracking:"LOST"|"HOLD"|"TRACKING", event:"HIT"|"LIFT"|null, state:"IDLE"|"TOUCHED",
+   *            landmarks:Array|null, isReacquired:boolean, ry:number, vy:number, smoothed:Array, stateReset:boolean}}
    */
   update(hand, p) {
     const cfg = p.finger;
@@ -176,14 +196,13 @@ export class TapDetector {
         }
       } else {
         // 完全ロスト：ステート・フィルター・追従情報を全リセット
-        const stateReset = this.tapState !== "IDLE";
-        this.tapState = "IDLE";
+        const stateReset = this.resetTapStates();
         this.landmarkFilters.forEach((f) => f.reset());
         this.hasValidSmoothed = false;
         this.lastRawLandmarks = null;
         this.lastFilteredFingerKey = null;
         return {
-          tracking: "LOST", event: null, landmarks: null, isReacquired: false,
+          tracking: "LOST", event: null, state: "IDLE", landmarks: null, isReacquired: false,
           ry: NaN, vy: 0, smoothed: this.smoothed, stateReset
         };
       }
@@ -197,7 +216,7 @@ export class TapDetector {
     const landmarks = hasHand ? hand : this.lastRawLandmarks;
     if (!landmarks) {
       return {
-        tracking: "LOST", event: null, landmarks: null, isReacquired: false,
+        tracking: "LOST", event: null, state: "IDLE", landmarks: null, isReacquired: false,
         ry: NaN, vy: 0, smoothed: this.smoothed, stateReset: false
       };
     }
@@ -230,24 +249,27 @@ export class TapDetector {
     const ry = (smoothTip.y - smoothBase.y) / safeBaseDistPx;
     const vy = this.landmarkFilters[cfg.tipIdx].getVelocityY();
 
-    // ステート更新
+    // ステート更新（ステートは指ごとに持つ：ある指が TOUCHED でも、次の対象指の判定は妨げない）
+    const st = this.stateOf(p.fingerKey);
     let event = null;
-    if (this.tapState === "IDLE" && p.gateOpen && !isReacquired) {
-      if (ry >= p.hitRy && vy >= p.vyTh) {
-        this.tapState = "TOUCHED";
+    if (st.state === "IDLE") {
+      if (p.gateOpen && !isReacquired && ry >= p.hitRy && vy >= p.vyTh) {
+        st.state = "TOUCHED";
+        st.peakRy = ry;
         event = "HIT";
       }
-    } else if (this.tapState === "TOUCHED") {
-      const isLiftByPosition = ry <= p.liftRy;
-      const isLiftByRebound = vy <= REBOUND_VY && ry <= p.hitRy - REBOUND_RY_MARGIN;
-      if (isLiftByPosition || isLiftByRebound) {
-        this.tapState = "IDLE";
+    } else {
+      // 離鍵：打鍵後のピークから releaseDropRy 下がり、かつ指先の下降が止まっていたら待機へ戻す
+      if (ry > st.peakRy) st.peakRy = ry;
+      if (st.peakRy - ry >= this.opt.releaseDropRy && vy <= this.opt.releaseMaxVy) {
+        st.state = "IDLE";
+        st.peakRy = -Infinity;
         event = "LIFT";
       }
     }
 
     return {
-      tracking: hasHand ? "TRACKING" : "HOLD", event, landmarks, isReacquired,
+      tracking: hasHand ? "TRACKING" : "HOLD", event, state: st.state, landmarks, isReacquired,
       ry, vy, smoothed: this.smoothed, stateReset: false
     };
   }

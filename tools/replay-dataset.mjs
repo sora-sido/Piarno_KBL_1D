@@ -28,6 +28,8 @@ const REC_HEIGHT = 720;
 // 連続する打鍵ラベルを 1 回の打鍵にまとめる間隔と、検出と打鍵を対応づける許容差
 const LABEL_MERGE_MS = 120;
 const MATCH_TOLERANCE_MS = 250;
+// これより短い間隔で続いた検出は「1 回の打鍵で 2 回鳴った」とみなす
+const DOUBLE_TRIGGER_MS = 200;
 
 const args = process.argv.slice(2);
 const asJson = args.includes("--json");
@@ -108,7 +110,7 @@ function matchEvents(labels, hits) {
 /** 1 本の録画を判定器に通し、HIT の時刻を返す */
 function replay(frames, fingerKey, model) {
   const cfg = FINGER_CONFIGS[fingerKey];
-  const detector = new TapDetector();
+  const detector = new TapDetector(process.env.DET_OPT ? JSON.parse(process.env.DET_OPT) : {});
   const hits = [];
   const norm = (pt) => ({ x: (pt.x * scale) / (REC_WIDTH * scale), y: (pt.y * scale) / (REC_HEIGHT * scale) });
   for (const f of frames) {
@@ -129,7 +131,6 @@ function replay(frames, fingerKey, model) {
       fingerKey,
       finger: cfg,
       hitRy: model.hitRy,
-      liftRy: model.liftRy,
       vyTh: FINGER_VY_THRESHOLDS[fingerKey],
       gateOpen: true
     });
@@ -165,7 +166,7 @@ for (const k of Object.keys(datasetsByFinger)) {
 
 // ---- 再生 ----
 const rows = [];
-const total = { labels: 0, tp: 0, miss: 0, extra: 0 };
+const total = { labels: 0, tp: 0, miss: 0, extra: 0, doubles: 0 };
 const negatives = {};
 for (const rec of recordings) {
   const model = models[rec.fingerKey];
@@ -174,6 +175,8 @@ for (const rec of recordings) {
   if (rec.kind === "tap") {
     const labels = labelEvents(rec.frames);
     const m = matchEvents(labels, hits);
+    m.doubles = hits.filter((h, i) => i > 0 && h - hits[i - 1] < DOUBLE_TRIGGER_MS).length;
+    total.doubles += m.doubles;
     total.labels += labels.length;
     total.tp += m.tp;
     total.miss += m.miss;
@@ -201,15 +204,15 @@ if (asJson) {
   for (const [k, m] of Object.entries(models)) {
     console.log(`  ${k.padEnd(7)} hitRy=${m.hitRy.toFixed(2)} liftRy=${m.liftRy.toFixed(2)} vyTH=${FINGER_VY_THRESHOLDS[k]} 打鍵サンプル=${m.samples}`);
   }
-  console.log("\n指      種類    秒数  打鍵  検出  一致  漏れ  余分");
+  console.log("\n指      種類    秒数  打鍵  検出  一致  漏れ  余分  二重");
   for (const r of rows) {
     if (r.kind === "tap") {
-      console.log(`${r.finger.padEnd(7)} ${r.kind.padEnd(6)}${pad(r.durationSec.toFixed(1), 6)}${pad(r.labels, 6)}${pad(r.hits, 6)}${pad(r.tp, 6)}${pad(r.miss, 6)}${pad(r.extra, 6)}`);
+      console.log(`${r.finger.padEnd(7)} ${r.kind.padEnd(6)}${pad(r.durationSec.toFixed(1), 6)}${pad(r.labels, 6)}${pad(r.hits, 6)}${pad(r.tp, 6)}${pad(r.miss, 6)}${pad(r.extra, 6)}${pad(r.doubles, 6)}`);
     } else {
       console.log(`${r.finger.padEnd(7)} ${r.kind.padEnd(6)}${pad(r.durationSec.toFixed(1), 6)}${pad("-", 6)}${pad(r.hits, 6)}${pad("-", 6)}${pad("-", 6)}${pad(r.hits, 6)}`);
     }
   }
-  console.log(`\n打鍵の検出率: ${(recall * 100).toFixed(1)}% (${total.tp}/${total.labels})  漏れ ${total.miss}  余分 ${total.extra}`);
+  console.log(`\n打鍵の検出率: ${(recall * 100).toFixed(1)}% (${total.tp}/${total.labels})  漏れ ${total.miss}  余分 ${total.extra}（うち 200ms 未満の二重検出 ${total.doubles}）`);
   console.log("打鍵していない録画での誤検知（回/分）:");
   for (const [k, v] of Object.entries(falsePerMin)) {
     console.log(`  ${k.padEnd(6)} ${v.toFixed(1)}  (${negatives[k].hits} 回 / ${negatives[k].durationSec.toFixed(0)} 秒)`);
