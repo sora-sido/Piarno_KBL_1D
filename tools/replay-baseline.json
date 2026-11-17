@@ -1,0 +1,6 @@
+{
+  "comment": "同梱データセットでの再生結果の基準。判定ロジックを変えてこれを下回ったら npm run replay:check が失敗する。意図して結果が変わった場合は、npm run replay の結果を確かめたうえでこの値を更新する。",
+  "minDetected": 276,
+  "maxDoubles": 2,
+  "maxFalseHits": { "air": 9, "idle": 27, "slide": 16, "wrist": 28 }
+}
