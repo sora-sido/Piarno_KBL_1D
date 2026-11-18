@@ -9,12 +9,15 @@ Piarno_KBL_1D/
 ├── latency.js              # 遅れの測定モード
 ├── style.css               # 白黒基調のHUD & ネオンフィードバックUIスタイル
 ├── vite.config.js          # HTTPS対応およびLAN/QRコード公開設定
+├── musicxml-song.js        # 楽譜ファイル（MusicXML）から弾く音の列を作る
+├── songs/
+│   └── shin_takarajima.musicxml # 新宝島の楽譜（アプリはこのファイルから読み込む）
 ├── tap-detector.js         # 打鍵判定の別実装（検証ツール用。アプリ本体ではまだ使っていない）
 ├── finger-config.js        # 指の定義（tap-detector.js と検証ツールが使用）
 ├── tools/
 │   ├── replay-dataset.mjs  # 録画データを tap-detector.js に通して検出率・誤検知を数える
 │   └── replay-baseline.json # 再生結果の基準値
-├── scores/                 # 楽譜ページ（新宝島）
+├── scores/                 # 旧版の新宝島の楽譜ページ（現在のアプリのデータとは別物）
 ├── docs/                   # 変更まとめ・分析ページ
 ├── public/
 │   ├── dataset/            # 指別の打鍵検証用CSVデータセット
@@ -22,6 +25,23 @@ Piarno_KBL_1D/
 │   │   └── *.csv           # 各指の時系列フレーム座標・打鍵ラベルデータ
 │   └── models/             # MediaPipe HandLandmarker モデルアセット
 ```
+
+### 曲の直し方（新宝島）
+
+新宝島の音は `songs/shin_takarajima.musicxml` から読み込んでいる。コードを直す必要はない。
+
+1. `songs/shin_takarajima.musicxml` を MuseScore などの楽譜ソフトで開く
+2. 音・リズム・指番号（運指記号）を楽譜上で直す
+3. MusicXML（`.musicxml`）で書き出し、同じ名前で上書きする
+
+読み込みの決まり（`musicxml-song.js`）：
+
+- 最初のパートの、1 つ目の声部の音を上から順に弾く。和音は一番上の音だけ、装飾音は使わない
+- タイでつながった音は 1 回の打鍵になる
+- 指番号は、運指記号があればそれを使う。無い音は ド=1 レ=2 ミ=3 ファ=4 ソ=5（C4〜G4）、
+  それより低い音は 1、高い音は 5（♭・♯が付いても同じ指）
+- 練習番号（例：「Aメロ」）を付けると、演奏中に曲名の横に表示される
+- 小節番号は楽譜のものをそのまま表示する
 
 ### 打鍵判定の検証
 

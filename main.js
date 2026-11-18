@@ -8,6 +8,8 @@
 
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
+import { parseMusicXmlMelody, midiOf, freqOfMidi } from "./musicxml-song.js";
+import shinTakarajimaXml from "./songs/shin_takarajima.musicxml?raw";
 import { setupRecordButton, onPlayStart, onHit as onRecordHit, recordFrame, isRecording } from "./recorder.js";
 import { startPositioning, updatePositioning, isPositioning, evaluateDrift, directionGraphic } from "./positioning.js";
 import { setupLatencyButton, isLatencyMode, onLatencyTap } from "./latency.js";
@@ -126,6 +128,17 @@ const NOTE_TO_FREQ_MAP = Object.entries(FREQ_TO_NOTE_MAP).reduce((acc, [f, n]) =
   acc[n] = parseFloat(f);
   return acc;
 }, {});
+
+/**
+ * 音名（"Bb3", "F#4", "C5" など）から周波数を求める。読めない名前なら null
+ * @param {string} name
+ */
+function noteNameToFreq(name) {
+  const m = /^([A-G])(b|#)?(-?\d)$/.exec(name || "");
+  if (!m) return null;
+  const alter = m[2] === "b" ? -1 : m[2] === "#" ? 1 : 0;
+  return freqOfMidi(midiOf(m[1], alter, Number(m[3])));
+}
 
 /**
  * Tone.js Salamander Grand Piano 音源サンプラーの初期化
@@ -345,7 +358,7 @@ export function playTapSound(targetFreqOrNote = 523.25, countAsTap = true, optio
 
   if (typeof targetFreqOrNote === "string") {
     noteName = targetFreqOrNote;
-    freq = NOTE_TO_FREQ_MAP[noteName] || 523.25;
+    freq = NOTE_TO_FREQ_MAP[noteName] || noteNameToFreq(noteName) || 523.25;
   } else if (typeof targetFreqOrNote === "number") {
     freq = targetFreqOrNote;
     const roundedFreq = Math.round(freq * 100) / 100;
@@ -727,86 +740,12 @@ export const MARY_HAD_A_LITTLE_LAMB_SEQUENCE = [
   { step: 26, phrase: 2, fingerNum: 1, fingerKey: "THUMB",  note: "ド", rightNote: "C5", freq: 523.25, autoLeftNote: "C3" }
 ];
 
-// 『新宝島』運指・音名シーケンス定義（右手のみ・調号♭2つ＝シはすべてシ♭）
-// scores/shin_takarajima.html の楽譜と同じモチーフ構成。タイでつながる音は1打鍵として扱う
-// 書式: "音名:指番号"（1:親指, 2:人差し指, 3:中指, 4:薬指, 5:小指）
-const SHIN_TAKARAJIMA_NOTES = {
-  F4:  { note: "ファ", freq: 349.23 },
-  G4:  { note: "ソ",   freq: 392.00 },
-  A4:  { note: "ラ",   freq: 440.00 },
-  Bb4: { note: "シ♭", freq: 466.16 },
-  C5:  { note: "ド",   freq: 523.25 },
-  D5:  { note: "レ",   freq: 587.33 },
-  F5:  { note: "ファ", freq: 698.46 },
-  G5:  { note: "ソ",   freq: 783.99 }
-};
-
-// 書式: "音名:指番号:次の音までの長さ:音の長さ"（長さは8分音符=1。音の長さを省くと「次の音までの長さ」と同じ）
-// リズムは scores/shin_takarajima.html の楽譜と同じ（タイでつながる音は1音にまとめて長さを合計）
-const SHIN_TAKARAJIMA_MOTIFS = {
-  // ソ レ ド レ ／ ファ レ ド レ レ（♩ ♩ ♩ ♪♪ ｜ 𝄾♪ 𝄾♪ 𝄾♪ 𝄾♪）
-  F:  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 F5:4:2:1 D5:2:2:1 C5:1:2:1 D5:2:2:1 D5:2:1",
-  // ソ レ ド レ ／ ソ(高) レ ド レ レ
-  S:  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G5:5:2:1 D5:2:2:1 C5:1:2:1 D5:2:2:1 D5:2:1",
-  // ソ レ ド レ ／ ソ(低) レ ド レ レ（間奏）
-  L:  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G4:1:2:1 D5:2:2:1 C5:1:2:1 D5:2:2:1 D5:2:1",
-  // ソ レ ド レ ／ ソ レ ド ファ ファ
-  SF: "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G5:5:2:1 D5:2:2:1 C5:1:2:1 F5:4:2:1 F5:4:1",
-  // ソ ソ ド ド ／ ファ ソ シ♭ ド レ ファ ソ
-  R:  "G4:1:2 G4:1:2 C5:2:2 C5:2:1 F4:1:2:1 G4:2:1 Bb4:3:1 C5:1:1 D5:2:1 F5:4:1 G5:5:2",
-  // 大サビ最後：ソ レ ド レ ／ ソ レ ド レ レ ファ ファ
-  E:  "G4:1:2 D5:2:2 C5:1:2 D5:2:1 G5:5:2:1 D5:2:2:1 C5:1:1 D5:2:1 D5:2:1 F5:4:1 F5:4:1",
-  // 前奏・後奏の共通フレーズ：ソ ／ ファ レ ド ／ シ♭ ソ ／ ファ ／ ソ シ♭ ／ ド
-  P:  "G5:5:8 F5:4:4 D5:2:2 C5:1:4 Bb4:2:2 G4:1:10 F4:1:2 G4:1:4 Bb4:1:4 C5:2:4"
-};
-
-const SHIN_TAKARAJIMA_SECTIONS = [
-  ["前奏",   ["P", "Bb4:1:2 C5:2:4 D5:3:2 Bb4:1:4", "F5:4:2 D5:2:2 F5:4:2 D5:2:2 G5:5:16 F5:4:16"]],
-  ["Aメロ",  ["F","S","F","SF","F","S","S","S","S","F","S","S","F","R"]],
-  ["サビ",   ["F","S","F","SF","F","S","F","SF","F","S","F","SF"]],
-  ["間奏",   ["L","L","L","F","L","L","F","R"]],
-  ["サビ2",  ["F","S","F","SF","F","S","F","SF","F","F","F","F","F","S","F","R"]],
-  ["大サビ", ["F","S","F","SF","F","S","F","SF","F","S","F","E"]],
-  ["後奏",   [
-    "P", "Bb4:1:2 C5:2:4 D5:3:2 F5:4:2 G5:5:2",                                       // …ド シ♭ ド レ ファ ソ
-    "F5:4:4 D5:2:2 C5:1:4 Bb4:2:2 G4:1:10 F4:1:2 G4:1:4 Bb4:1:4 C5:2:4 A4:1:2 Bb4:2:2", // ファ レ ド … ド ラ シ♭
-    "P", "Bb4:1:2 C5:2:4 D5:3:6",                                                     // …ド シ♭ ド レ
-    "F5:4:2 D5:2:2 F5:4:2 D5:2:2",                                                    // ファ レ ファ レ
-    "P", "A4:1:2 Bb4:2:2",                                                            // …ド ラ シ♭
-    "F5:4:2 D5:2:2 F5:4:2 D5:2:2 G5:5:8"                                              // ファ レ ファ レ ソー
-  ]]
-];
-
-const FINGER_KEY_BY_NUM = { 1: "THUMB", 2: "INDEX", 3: "MIDDLE", 4: "RING", 5: "PINKY" };
-
-function buildShinTakarajimaSequence() {
-  const seq = [];
-  SHIN_TAKARAJIMA_SECTIONS.forEach(([, parts], sectionIdx) => {
-    parts.forEach((part) => {
-      const tokens = (SHIN_TAKARAJIMA_MOTIFS[part] || part).split(/\s+/);
-      tokens.forEach((token) => {
-        const [rightNote, finger, ioi, dur] = token.split(":");
-        const fingerNum = Number(finger);
-        const info = SHIN_TAKARAJIMA_NOTES[rightNote];
-        seq.push({
-          step: seq.length + 1,
-          phrase: sectionIdx + 1,
-          fingerNum,
-          fingerKey: FINGER_KEY_BY_NUM[fingerNum],
-          note: info.note,
-          rightNote,
-          freq: info.freq,
-          autoLeftNote: null,
-          ioi: Number(ioi),
-          dur: Number(dur || ioi)
-        });
-      });
-    });
-  });
-  return seq;
-}
-
-export const SHIN_TAKARAJIMA_SEQUENCE = buildShinTakarajimaSequence();
+// 『新宝島』は楽譜ファイル songs/shin_takarajima.musicxml から読み込む
+// （楽譜ソフトで直して書き出し直せば、そのままアプリに反映される。読み込み方は musicxml-song.js）
+// 指番号は楽譜の運指記号を使う。記号が無い音は ド=1 レ=2 ミ=3 ファ=4 ソ=5（C4〜G4）、
+// それより低い音は 1、高い音は 5
+const SHIN_TAKARAJIMA_SCORE = parseMusicXmlMelody(shinTakarajimaXml, { homeOctave: 4 });
+export const SHIN_TAKARAJIMA_SEQUENCE = SHIN_TAKARAJIMA_SCORE.notes;
 
 // ---- リズム（8分音符=1）。落ちてくるノーツの間隔と長さに使う ----
 // よろこびのうた：4分音符=2。4・8・16小節目は「付点4分・8分・2分」、10・11小節目に8分音符2つ
@@ -876,7 +815,8 @@ export const SONGS = {
   shin_takarajima: {
     id: "shin_takarajima",
     title: "新宝島",
-    sequence: SHIN_TAKARAJIMA_SEQUENCE
+    sequence: SHIN_TAKARAJIMA_SEQUENCE,
+    firstMeasure: SHIN_TAKARAJIMA_SCORE.measures[0]
   },
   // フリー演奏：楽譜なし。5本の指それぞれが決まった音を鳴らす（親指ド・人差し指レ・中指ミ・薬指ファ・小指ソ）
   free: {
@@ -1052,18 +992,13 @@ function updatePipStatus(landmarks) {
 
 /**
  * 演奏記録（recorder.js）に渡す曲と判定基準の情報
- * 新宝島は前奏（phrase 1 = 第1〜20音）を弾き終えたら記録を止める。ほかの曲は最後まで
+ * どの曲も最後まで記録する
  */
 function buildRecordMeta() {
   const song = SONGS[currentSongId];
   const seq = currentSequence;
-  let stopAfterStep = seq.length - 1;
-  let rangeLabel = "全曲";
-  if (currentSongId === "shin_takarajima") {
-    const introLen = seq.filter((n) => n.phrase === 1).length;
-    stopAfterStep = introLen - 1;
-    rangeLabel = `前奏（第1〜${introLen}音）`;
-  }
+  const stopAfterStep = seq.length - 1;
+  const rangeLabel = "全曲";
   const thresholds = {};
   Object.keys(FINGER_CONFIGS).forEach((k) => {
     const m = fingerThresholdModels[k] || { hitRy: 0.6, liftRy: 0.57 };
@@ -1394,8 +1329,8 @@ export function renderSongGuideUI() {
   // 画面上部：ミニマル進捗バッジ（白黒ミニマル）
   if (songProgressBadge) {
     const song = SONGS[currentSongId];
-    const section = currentSongId === "shin_takarajima" && SHIN_TAKARAJIMA_SECTIONS[currentItem.phrase - 1]
-      ? `・${SHIN_TAKARAJIMA_SECTIONS[currentItem.phrase - 1][0]}` : "";
+    // 楽譜に練習番号（例：「Aメロ」）があれば曲名の後ろに出す
+    const section = currentItem.section ? `・${currentItem.section}` : "";
     // 進み具合は画面上端のバーで示すので、ここは曲名（とセクション）だけ
     songProgressBadge.innerHTML = `<span class="badge-song"></span>`;
     songProgressBadge.querySelector(".badge-song").textContent = `${song ? song.title : ""}${section}`;
@@ -1553,8 +1488,11 @@ function textColorOn(hex) {
   return L > 0.3 ? "#0b0d12" : "#ffffff";
 }
 
-// 低いオクターブの音か（新宝島の F4・G4・A4・B♭4。右手の基本位置 C5〜G5 より下）
+// 低いオクターブの音か（右手の基本位置 ド〜ソ より下の音。音名の下に点を付ける）
+// 楽譜から読み込んだ曲は音ごとに octaveShift を持つ（基本位置 C4〜G4 より下なら -1）。
+// それ以外の曲は基本位置が C5〜G5 なので、4 オクターブ以下を低い音とする
 function isLowOctave(note) {
+  if (typeof note.octaveShift === "number") return note.octaveShift < 0;
   const m = /(\d)$/.exec(note.rightNote || "");
   return !!m && Number(m[1]) <= 4;
 }
@@ -1691,6 +1629,8 @@ function drawRhythmHighway(now) {
 
   // 小節線（4拍ごと）と拍の線
   const firstE = Math.ceil(viewOnset - 1);
+  // 曲の最初の小節の番号（楽譜の途中から始まる曲もある）
+  const firstBar = (SONGS[currentSongId] && SONGS[currentSongId].firstMeasure) || 1;
   for (let e = firstE; ; e++) {
     const y = yOf(e);
     if (y < topY) break;
@@ -1701,15 +1641,15 @@ function drawRhythmHighway(now) {
       ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + width, y); ctx.stroke();
       ctx.fillStyle = "rgba(255,255,255,0.45)";
       ctx.font = "11px sans-serif";
-      // 小節番号：左に余白があれば線の左、狭い画面ではレーンの内側に
+      // 小節番号（楽譜から読み込んだ曲は楽譜と同じ番号）：左に余白があれば線の左、狭い画面ではレーンの内側に
       if (left >= 26) {
         ctx.textAlign = "right";
         ctx.textBaseline = "middle";
-        ctx.fillText(`${e / 8 + 1}`, left - 4, y);
+        ctx.fillText(`${e / 8 + firstBar}`, left - 4, y);
       } else {
         ctx.textAlign = "left";
         ctx.textBaseline = "bottom";
-        ctx.fillText(`${e / 8 + 1}`, left + 3, y - 2);
+        ctx.fillText(`${e / 8 + firstBar}`, left + 3, y - 2);
       }
     } else if (e % 2 === 0) {
       ctx.strokeStyle = "rgba(255,255,255,0.08)";
