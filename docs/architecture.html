@@ -1,0 +1,343 @@
+<title>Piarno アーキテクチャ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: AWS 構成図の文法（外枠＝実行場所、点線＝役割グループ、色タイル＝部品、黒丸＝処理順）を白いキャンバス1枚に */
+:root {
+  --page: #eef0f3;
+  --canvas: #ffffff;
+  --ink: #1b2330;
+  --muted: #5d6676;
+  --line: #3a4352;
+  --group: #b9c0cb;
+  --frame: #e07a1f;
+  --frame-ext: #6f7fa0;
+  --badge: #1b2330;
+  --badge-ink: #ffffff;
+  --c-cloud: #5a6b8c;
+  --c-input: #138a7a;
+  --c-vision: #7a4ddb;
+  --c-detect: #e2700f;
+  --c-song: #2d6be6;
+  --c-out: #d12f68;
+  --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0f1319; --canvas: #171c24; --ink: #e8ecf2; --muted: #9aa4b4; --line: #aeb7c5;
+    --group: #3c4655; --frame: #f0913f; --frame-ext: #8d9cbc; --badge: #e8ecf2; --badge-ink: #11151b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0f1319; --canvas: #171c24; --ink: #e8ecf2; --muted: #9aa4b4; --line: #aeb7c5;
+  --group: #3c4655; --frame: #f0913f; --frame-ext: #8d9cbc; --badge: #e8ecf2; --badge-ink: #11151b;
+  color-scheme: dark;
+}
+
+body { background: var(--page); color: var(--ink); font-family: var(--font-body); }
+.wrap {
+  max-width: 1280px; margin: 0 auto;
+  padding-block: 32px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 20px;
+}
+.sheet { background: var(--canvas); border-radius: 4px; padding: clamp(18px, 3vw, 36px); display: grid; gap: 22px; }
+header h1 { margin: 0; font-size: clamp(1.35rem, 2.4vw, 1.75rem); font-weight: 600; letter-spacing: .01em; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--muted); font-size: .95rem; }
+
+.diagram { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.diagram svg { display: block; width: 100%; min-width: 980px; height: auto; }
+
+/* SVG styling via tokens */
+.frame { fill: none; stroke: var(--frame); stroke-width: 1.6; }
+.frame-ext { fill: none; stroke: var(--frame-ext); stroke-width: 1.4; }
+.group { fill: none; stroke: var(--group); stroke-width: 1.3; stroke-dasharray: 5 4; }
+.frame-label { fill: var(--frame); font: 600 12.5px var(--font-body); }
+.frame-ext-label { fill: var(--frame-ext); font: 600 12.5px var(--font-body); }
+.group-label { fill: var(--muted); font: 500 12px var(--font-body); }
+.t-name { fill: var(--ink); font: 600 12.5px var(--font-body); text-anchor: middle; }
+.t-sub { fill: var(--muted); font: 400 10.5px var(--font-body); text-anchor: middle; }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+.edge-dash { fill: none; stroke: var(--line); stroke-width: 1.3; stroke-dasharray: 4 4; }
+.edge-label { fill: var(--muted); font: 500 10.5px var(--font-body); }
+.edge-label-strong { fill: var(--frame); font: 700 11px var(--font-mono); letter-spacing: .04em; }
+.arrowhead { fill: var(--line); }
+.badge circle { fill: var(--badge); }
+.badge text { fill: var(--badge-ink); font: 600 11px var(--font-mono); text-anchor: middle; dominant-baseline: central; }
+.glyph { fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.glyph-fill { fill: #fff; stroke: none; }
+
+/* Legend */
+.legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 28px; margin: 0; padding: 0; list-style: none; }
+.legend li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start; }
+.num { width: 22px; height: 22px; border-radius: 50%; background: var(--badge); color: var(--badge-ink);
+  font: 600 11px/22px var(--font-mono); text-align: center; font-variant-numeric: tabular-nums; }
+.legend b { display: block; font-size: .9rem; font-weight: 600; }
+.legend span { display: block; color: var(--muted); font-size: .82rem; line-height: 1.55; }
+.legend code { font-family: var(--font-mono); font-size: .78rem; }
+.foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: var(--muted); font-size: .78rem; border-top: 1px solid var(--group); padding-top: 14px; }
+.key { display: flex; flex-wrap: wrap; gap: 14px; }
+.key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+@media (max-width: 900px) { .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .legend { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<div class="wrap">
+  <div class="sheet">
+    <header>
+      <h1>Piarno アーキテクチャ</h1>
+      <p>カメラ1台で机をピアノに変える、ブラウザだけで完結する打鍵認識システムの構成。</p>
+    </header>
+
+    <div class="diagram" role="img" aria-label="Piarno の構成図。配信・アセットから読み込み、端末のブラウザ内でカメラ映像→手の認識→打鍵判定→楽曲エンジン→音とUIの順に処理する。">
+      <svg viewBox="0 0 1240 700" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="arrowhead" d="M0 0 L10 5 L0 10 z"/>
+          </marker>
+
+          <!-- icon glyphs (24x24) -->
+          <symbol id="g-vercel" viewBox="0 0 24 24"><path class="glyph-fill" d="M12 4.5 L21 19.5 H3 Z"/></symbol>
+          <symbol id="g-cdn" viewBox="0 0 24 24"><path class="glyph" d="M12 3.5 L19.5 7.5 V16.5 L12 20.5 L4.5 16.5 V7.5 Z M4.5 7.5 L12 11.5 L19.5 7.5 M12 11.5 V20.5"/></symbol>
+          <symbol id="g-model" viewBox="0 0 24 24"><path class="glyph" d="M7 7 H17 V17 H7 Z M10 10 H14 V14 H10 Z M9.5 4 V7 M14.5 4 V7 M9.5 17 V20 M14.5 17 V20 M4 9.5 H7 M4 14.5 H7 M17 9.5 H20 M17 14.5 H20"/></symbol>
+          <symbol id="g-piano" viewBox="0 0 24 24"><path class="glyph" d="M3.5 5.5 H20.5 V18.5 H3.5 Z M8.5 5.5 V18.5 M15.5 5.5 V18.5 M12 5.5 V18.5"/><path class="glyph-fill" d="M7 5.5 H10 V12.5 H7 Z M14 5.5 H17 V12.5 H14 Z"/></symbol>
+          <symbol id="g-camera" viewBox="0 0 24 24"><path class="glyph" d="M3.5 8 H7.5 L9 5.5 H15 L16.5 8 H20.5 V18.5 H3.5 Z"/><circle class="glyph" cx="12" cy="13" r="3.4"/></symbol>
+          <symbol id="g-hand" viewBox="0 0 24 24"><path class="glyph" d="M12 20 L8 15.5 L5 12 M8 15.5 L8.5 9 L8.5 5 M12 20 L11.5 13 L11.5 4 M12 20 L14.5 13.5 L15 5.5 M12 20 L16.5 14.5 L18.5 8.5"/><g class="glyph-fill"><circle cx="5" cy="12" r="1.3"/><circle cx="8.5" cy="5" r="1.3"/><circle cx="11.5" cy="4" r="1.3"/><circle cx="15" cy="5.5" r="1.3"/><circle cx="18.5" cy="8.5" r="1.3"/><circle cx="12" cy="20" r="1.5"/></g></symbol>
+          <symbol id="g-target" viewBox="0 0 24 24"><circle class="glyph" cx="12" cy="12" r="7.5"/><circle class="glyph" cx="12" cy="12" r="3"/><path class="glyph" d="M12 2.5 V6 M12 18 V21.5 M2.5 12 H6 M18 12 H21.5"/></symbol>
+          <symbol id="g-filter" viewBox="0 0 24 24"><path class="glyph" d="M3 9 L5 6 L6.5 11 L8.5 5 L10 10" opacity=".55"/><path class="glyph" d="M3 17 C7 17 8 13 12 13 S17 9 21 9"/><path class="glyph" d="M10.5 8 H13"/></symbol>
+          <symbol id="g-vector" viewBox="0 0 24 24"><path class="glyph" d="M4.5 4 V19.5 H20"/><path class="glyph" d="M13 5.5 V15.5 M9.5 12 L13 15.5 L16.5 12"/></symbol>
+          <symbol id="g-data" viewBox="0 0 24 24"><ellipse class="glyph" cx="12" cy="6.5" rx="7" ry="2.5"/><path class="glyph" d="M5 6.5 V17.5 C5 19 8 20 12 20 S19 19 19 17.5 V6.5 M5 12 C5 13.5 8 14.5 12 14.5 S19 13.5 19 12"/></symbol>
+          <symbol id="g-state" viewBox="0 0 24 24"><circle class="glyph" cx="6.5" cy="12" r="3.5"/><circle class="glyph" cx="17.5" cy="12" r="3.5"/><path class="glyph" d="M9 9.5 C11 7.5 13 7.5 15 9.5 M15 14.5 C13 16.5 11 16.5 9 14.5 M13.5 8.2 L15 9.5 L13.3 10.6 M10.5 15.8 L9 14.5 L10.7 13.4"/></symbol>
+          <symbol id="g-score" viewBox="0 0 24 24"><path class="glyph" d="M3.5 7 H20.5 M3.5 10.5 H20.5 M3.5 14 H20.5 M3.5 17.5 H20.5" opacity=".55"/><path class="glyph" d="M10 17.5 V6 L16.5 4.5 V15"/><ellipse class="glyph-fill" cx="8.6" cy="17.6" rx="2" ry="1.5"/><ellipse class="glyph-fill" cx="15.1" cy="15.1" rx="2" ry="1.5"/></symbol>
+          <symbol id="g-step" viewBox="0 0 24 24"><path class="glyph" d="M5 6 L13 12 L5 18 Z M13 6 L21 12 L13 18 Z"/></symbol>
+          <symbol id="g-speaker" viewBox="0 0 24 24"><path class="glyph" d="M4 9.5 H7.5 L12.5 5.5 V18.5 L7.5 14.5 H4 Z M15.5 9 C16.8 10.6 16.8 13.4 15.5 15 M18 6.5 C20.6 9.6 20.6 14.4 18 17.5"/></symbol>
+          <symbol id="g-screen" viewBox="0 0 24 24"><path class="glyph" d="M3.5 4.5 H20.5 V16.5 H3.5 Z M9 20 H15 M12 16.5 V20"/><path class="glyph" d="M8 7.5 V10 M12 7.5 V12.5 M16 7.5 V9" /></symbol>
+        </defs>
+
+        <!-- ===== frames ===== -->
+        <rect class="frame-ext" x="20" y="18" width="560" height="146" rx="2"/>
+        <text class="frame-ext-label" x="36" y="40">配信・アセット（起動時に読み込み）</text>
+        <rect class="frame-ext" x="1004" y="18" width="216" height="146" rx="2"/>
+        <text class="frame-ext-label" x="1020" y="40">音源</text>
+
+        <rect class="frame" x="20" y="194" width="1200" height="488" rx="2"/>
+        <text class="frame-label" x="36" y="216">端末のブラウザ内（スマホ / iPad）</text>
+
+        <rect class="group" x="40" y="232" width="164" height="430"/>
+        <text class="group-label" x="52" y="254">入力</text>
+        <rect class="group" x="226" y="232" width="226" height="430"/>
+        <text class="group-label" x="238" y="254">手の認識</text>
+        <rect class="group" x="478" y="232" width="330" height="430"/>
+        <text class="group-label" x="490" y="254">打鍵判定エンジン</text>
+        <rect class="group" x="834" y="232" width="170" height="430"/>
+        <text class="group-label" x="846" y="254">楽曲エンジン</text>
+        <rect class="group" x="1030" y="232" width="170" height="430"/>
+        <text class="group-label" x="1042" y="254">出力</text>
+
+        <!-- ===== edges ===== -->
+        <!-- cloud -> device -->
+        <path class="edge" d="M110 150 V192" marker-end="url(#ah)"/>
+        <text class="edge-label" x="118" y="180">ページ</text>
+        <path class="edge" d="M260 150 V268 H334 V296" marker-end="url(#ah)"/>
+        <path class="edge" d="M430 150 V268 H346 V296" marker-end="url(#ah)"/>
+        <path class="edge" d="M1112 150 V296" marker-end="url(#ah)"/>
+
+        <!-- camera -> mediapipe -->
+        <path class="edge" d="M150 420 H212 V330 H306" marker-end="url(#ah)"/>
+        <text class="edge-label" x="156" y="412">映像</text>
+        <!-- mediapipe -> selector -->
+        <path class="edge" d="M340 398 V488" marker-end="url(#ah)"/>
+        <text class="edge-label" x="348" y="447">21点の座標</text>
+        <!-- selector -> filter -->
+        <path class="edge" d="M374 520 H465 V330 H528" marker-end="url(#ah)"/>
+        <!-- filter -> features -->
+        <path class="edge" d="M594 330 H690" marker-end="url(#ah)"/>
+        <!-- features -> state -->
+        <path class="edge" d="M724 398 V488" marker-end="url(#ah)"/>
+        <text class="edge-label" x="732" y="447">ry・vy</text>
+        <!-- threshold -> state -->
+        <path class="edge" d="M594 520 H690" marker-end="url(#ah)"/>
+        <text class="edge-label" x="606" y="512">閾値</text>
+        <!-- state -> step -->
+        <path class="edge" d="M758 520 H885" marker-end="url(#ah)"/>
+        <text class="edge-label-strong" x="796" y="512">HIT</text>
+        <!-- sequence -> step -->
+        <path class="edge" d="M919 398 V488" marker-end="url(#ah)"/>
+        <!-- step -> audio / ui -->
+        <path class="edge" d="M953 508 H1016 V330 H1080" marker-end="url(#ah)"/>
+        <text class="edge-label" x="1024" y="322">音名</text>
+        <path class="edge" d="M953 530 H1080" marker-end="url(#ah)"/>
+        <text class="edge-label" x="1024" y="548">ノーツ</text>
+        <!-- feedback: next finger -->
+        <path class="edge-dash" d="M919 590 V640 H724 V592" marker-end="url(#ah)"/>
+        <text class="edge-label" x="760" y="632">次に弾く指を判定対象に</text>
+
+        <!-- ===== tiles ===== -->
+        <!-- helper pattern per tile: rect 56x56 centered at (cx,cy), glyph 32x32, labels at cy+46 / cy+61 -->
+        <!-- 1 Vercel -->
+        <g transform="translate(110 86)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-cloud)"/>
+          <use href="#g-vercel" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="110" y="130">Vercel</text>
+        <text class="t-sub" x="110" y="145">静的ホスティング・HTTPS</text>
+
+        <g transform="translate(260 86)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-cloud)"/>
+          <use href="#g-cdn" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="260" y="130">jsDelivr</text>
+        <text class="t-sub" x="260" y="145">MediaPipe WASM</text>
+
+        <g transform="translate(430 86)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-cloud)"/>
+          <use href="#g-model" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="430" y="130">手の認識モデル</text>
+        <text class="t-sub" x="430" y="145">hand_landmarker.task（同梱）</text>
+
+        <g transform="translate(1112 86)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-out)"/>
+          <use href="#g-piano" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="1112" y="130">ピアノ音源</text>
+        <text class="t-sub" x="1112" y="145">Salamander Grand</text>
+
+        <!-- camera -->
+        <g transform="translate(122 420)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-input)"/>
+          <use href="#g-camera" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="122" y="466">フロントカメラ</text>
+        <text class="t-sub" x="122" y="481">getUserMedia・60fps志向</text>
+
+        <!-- mediapipe -->
+        <g transform="translate(340 330)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-vision)"/>
+          <use href="#g-hand" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="340" y="376">MediaPipe</text>
+        <text class="t-sub" x="340" y="391">HandLandmarker・GPU・1手</text>
+
+        <!-- selector -->
+        <g transform="translate(340 520)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-vision)"/>
+          <use href="#g-target" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="340" y="566">右手セレクター</text>
+        <text class="t-sub" x="340" y="581">左右判定・位置の連続性</text>
+
+        <!-- filter -->
+        <g transform="translate(560 330)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-detect)"/>
+          <use href="#g-filter" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="560" y="376">1 Euro Filter</text>
+        <text class="t-sub" x="560" y="391">21関節を平滑化・速度4Hz</text>
+
+        <!-- features -->
+        <g transform="translate(724 330)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-detect)"/>
+          <use href="#g-vector" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="724" y="376">特徴量 ry / vy</text>
+        <text class="t-sub" x="724" y="391">下がり具合・速さ（手の大きさ比）</text>
+
+        <!-- threshold -->
+        <g transform="translate(560 520)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-detect)"/>
+          <use href="#g-data" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="560" y="566">閾値モデル</text>
+        <text class="t-sub" x="560" y="581">打鍵録画CSVから指ごとに導出</text>
+
+        <!-- state -->
+        <g transform="translate(724 520)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-detect)"/>
+          <use href="#g-state" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="724" y="566">打鍵ステートマシン</text>
+        <text class="t-sub" x="724" y="581">待機 ⇄ 接触（ヒステリシス）</text>
+
+        <!-- sequence -->
+        <g transform="translate(919 330)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-song)"/>
+          <use href="#g-score" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="919" y="376">楽曲データ</text>
+        <text class="t-sub" x="919" y="391">音名・指番号・伴奏</text>
+
+        <!-- step -->
+        <g transform="translate(919 520)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-song)"/>
+          <use href="#g-step" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="919" y="566">ステップ進行</text>
+        <text class="t-sub" x="919" y="581">1打鍵で1音すすむ</text>
+
+        <!-- audio -->
+        <g transform="translate(1112 330)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-out)"/>
+          <use href="#g-speaker" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="1112" y="376">発音（Tone.js）</text>
+        <text class="t-sub" x="1112" y="391">即時発音・合成音で代替</text>
+
+        <!-- ui -->
+        <g transform="translate(1112 520)">
+          <rect x="-28" y="-28" width="56" height="56" rx="6" fill="var(--c-out)"/>
+          <use href="#g-screen" x="-16" y="-16" width="32" height="32"/>
+        </g>
+        <text class="t-name" x="1112" y="566">画面（Canvas）</text>
+        <text class="t-sub" x="1112" y="581">降るノーツ・運指ガイド</text>
+
+        <!-- ===== numbered badges ===== -->
+        <g class="badge"><circle cx="72" cy="62" r="11"/><text x="72" y="62">1</text></g>
+        <g class="badge"><circle cx="84" cy="396" r="11"/><text x="84" y="396">2</text></g>
+        <g class="badge"><circle cx="302" cy="306" r="11"/><text x="302" y="306">3</text></g>
+        <g class="badge"><circle cx="302" cy="496" r="11"/><text x="302" y="496">4</text></g>
+        <g class="badge"><circle cx="522" cy="306" r="11"/><text x="522" y="306">5</text></g>
+        <g class="badge"><circle cx="686" cy="306" r="11"/><text x="686" y="306">6</text></g>
+        <g class="badge"><circle cx="522" cy="496" r="11"/><text x="522" y="496">7</text></g>
+        <g class="badge"><circle cx="686" cy="496" r="11"/><text x="686" y="496">8</text></g>
+        <g class="badge"><circle cx="881" cy="306" r="11"/><text x="881" y="306">9</text></g>
+        <g class="badge"><circle cx="881" cy="496" r="11"/><text x="881" y="496">10</text></g>
+        <g class="badge"><circle cx="1074" cy="306" r="11"/><text x="1074" y="306">11</text></g>
+        <g class="badge"><circle cx="1074" cy="496" r="11"/><text x="1074" y="496">12</text></g>
+      </svg>
+    </div>
+
+    <ol class="legend">
+      <li><div class="num">1</div><div><b>配信</b><span>Vercel が HTML・JS・手の認識モデルを HTTPS で配信します。カメラは HTTPS でないと使えません。MediaPipe の WASM は jsDelivr から、ピアノ音源は tonejs.github.io から読み込みます。</span></div></li>
+      <li><div class="num">2</div><div><b>フロントカメラ</b><span>端末に合わせて 640×480〜960×540 で起動し、60fps を要求します。新しいフレームが届くたびに、次の処理が動きます。</span></div></li>
+      <li><div class="num">3</div><div><b>手の認識</b><span>MediaPipe HandLandmarker が GPU で手の21点の座標を推定します。探す手は1本に絞って、処理を軽くしています。</span></div></li>
+      <li><div class="num">4</div><div><b>右手セレクター</b><span>指の付け根の並び方で左右を判定し、手首の位置の連続性で右手を追い続けます。左手のデータは捨てます。</span></div></li>
+      <li><div class="num">5</div><div><b>1 Euro Filter</b><span>21関節すべての手ブレを抑えます。速く動くほど遅れが小さくなる仕組みで、速さの推定は4Hzで滑らかにしています。</span></div></li>
+      <li><div class="num">6</div><div><b>特徴量 ry / vy</b><span>指先がどれだけ下がったか（ry）と、下がる速さ（vy）を、手首から指の付け根までの長さで割って求めます。解像度や手とカメラの距離に左右されません。</span></div></li>
+      <li><div class="num">7</div><div><b>閾値モデル</b><span>起動時に <code>public/dataset</code> の打鍵録画CSVを読み、指ごとに「打鍵」「指を離した」とみなす下がり具合の基準値を決めます。</span></div></li>
+      <li><div class="num">8</div><div><b>打鍵ステートマシン</b><span>下がり具合と速さが同じフレームで両方とも基準を超えたら HIT と判定します。指が戻るか、上向きに跳ね返ると待機に戻ります。</span></div></li>
+      <li><div class="num">9</div><div><b>楽曲データ</b><span>よろこびのうた・メリーさんの羊・新宝島。1音ごとに音名・周波数・指番号・自動伴奏を持っています。</span></div></li>
+      <li><div class="num">10</div><div><b>ステップ進行</b><span>HIT のたびに1音すすみ、次に弾く指を判定の対象に切り替えます。最後まで弾くと、クリア表示のあと最初に戻ります。</span></div></li>
+      <li><div class="num">11</div><div><b>発音</b><span>Tone.js の Sampler で、判定と同時に鳴らします（先読み待ちは0）。音源の読み込みが終わるまでは、Web Audio の合成音で代わりに鳴らします。</span></div></li>
+      <li><div class="num">12</div><div><b>画面</b><span>手のイラストの指先に向かってノーツが降り、HIT すると弾けるエフェクトが出ます。運指ガイドと HUD も表示し、演奏中は画面が消えないようにしています。</span></div></li>
+    </ol>
+
+    <div class="foot">
+      <div class="key">
+        <span><i style="background:var(--c-cloud)"></i>配信</span>
+        <span><i style="background:var(--c-input)"></i>入力</span>
+        <span><i style="background:var(--c-vision)"></i>認識</span>
+        <span><i style="background:var(--c-detect)"></i>判定</span>
+        <span><i style="background:var(--c-song)"></i>楽曲</span>
+        <span><i style="background:var(--c-out)"></i>出力</span>
+      </div>
+      <span>Piarno_KBL_1D ・ main.js の構成をもとに作図</span>
+    </div>
+  </div>
+</div>
