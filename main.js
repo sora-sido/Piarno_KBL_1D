@@ -2819,6 +2819,101 @@ document.documentElement.style.setProperty("--video-aspect", initialAspect.toFix
 /**
  * インカメラ（フロントカメラ）の自動起動
  */
+/** 映像の最初のデータが届いたか（大きさが分かれば、映像が来ている） */
+function videoHasFrames() {
+  return video.readyState >= 1 && video.videoWidth > 0;
+}
+
+/**
+ * カメラの映像を video につないで再生し、映像が届くまで待つ
+ * - つないだらすぐに再生を始める。iPhone の Safari などは、再生を始めないと「準備ができた」合図（loadedmetadata）が来ない
+ *   （以前は合図を待ってから再生していたため、合図が来ない端末では 10 秒待って「映像が届きませんでした」になっていた）
+ * - 合図だけに頼らず、映像の大きさが分かった時点でも進む（合図を取りこぼしても止まらない）
+ * - 5 秒待っても届かなければ一度つなぎ直し、さらに 5 秒待つ。それでもだめなら CameraTimeoutError（detail にカメラの状態）
+ */
+async function attachAndPlay(stream) {
+  const waitFrames = (ms) => new Promise((resolve) => {
+    if (videoHasFrames()) { resolve(true); return; }
+    const events = ["loadedmetadata", "loadeddata", "canplay", "playing", "resize"];
+    const check = () => { if (videoHasFrames()) finish(true); };
+    const poll = setInterval(check, 200);
+    const timer = setTimeout(() => finish(false), ms);
+    function finish(ok) {
+      clearInterval(poll);
+      clearTimeout(timer);
+      events.forEach((ev) => video.removeEventListener(ev, check));
+      resolve(ok);
+    }
+    events.forEach((ev) => video.addEventListener(ev, check));
+  });
+
+  let playError = null;
+  const startPlay = () => {
+    const pr = video.play();
+    if (pr && typeof pr.catch === "function") {
+      pr.catch((e) => { playError = e; console.warn("[CAM] video.play() エラー:", e); });
+    }
+  };
+
+  video.srcObject = stream;
+  startPlay();
+  let ok = await waitFrames(5000);
+  if (!ok) {
+    console.warn("[CAM] 5 秒待っても映像が届かないため、つなぎ直します");
+    video.srcObject = null;
+    video.srcObject = stream;
+    startPlay();
+    ok = await waitFrames(5000);
+  }
+  if (!ok) {
+    const track = stream.getVideoTracks()[0];
+    const detail = track
+      ? `track=${track.readyState}${track.muted ? ",muted" : ""}${track.enabled ? "" : ",disabled"} video=${video.readyState}`
+      : "no-track";
+    const e = new Error(`カメラの映像が届きませんでした（${detail}）`);
+    e.name = "CameraTimeoutError";
+    e.detail = detail;
+    e.trackMuted = !!(track && track.muted);
+    e.trackEnded = !!(track && track.readyState === "ended");
+    throw e;
+  }
+
+  // 映像は来ている。再生が始まっていなければ、もう一度試す（自動再生が止められた場合は画面タップで再開してもらう）
+  if (video.paused) {
+    try {
+      await video.play();
+    } catch (playErr) {
+      playError = playErr;
+    }
+  }
+  if (video.paused && playError) {
+    const isAutoplayBlocked =
+      playError.name === "NotAllowedError" ||
+      playError.name === "AbortError" ||
+      (playError.message && playError.message.toLowerCase().includes("interact"));
+    if (isAutoplayBlocked) {
+      const autoErr = new Error("画面をタップしてカメラを開始してください");
+      autoErr.name = "AutoplayBlockedError";
+      throw autoErr;
+    }
+    throw playError;
+  }
+  console.log(`[CAM] 映像が届きました: ${video.videoWidth}x${video.videoHeight}`);
+
+  // ハードウェアがサポートする最大フレームレートの適用を試みる（映像が届いてから。届く前に変えると止まる端末がある）
+  const track = stream.getVideoTracks()[0];
+  if (track && typeof track.getCapabilities === "function" && typeof track.applyConstraints === "function") {
+    try {
+      const caps = track.getCapabilities();
+      console.log("[CAM CAPABILITIES]", caps);
+      const targetFps = caps.frameRate && caps.frameRate.max ? Math.min(60, caps.frameRate.max) : 60;
+      await track.applyConstraints({ frameRate: { ideal: targetFps } });
+    } catch (err) {
+      console.warn("FPS制約適用スキップ（端末非対応または制約適用不可）:", err);
+    }
+  }
+}
+
 async function startFrontCamera() {
   let stream = null;
 
@@ -3004,41 +3099,22 @@ async function startFrontCamera() {
   }
 
   currentStream = stream;
-  // 映像の準備ができた合図（loadedmetadata）は、この直後〜下の設定処理の間に来ることがある。
-  // 合図を待ち始めるのが遅れると、すでに来た合図を待ち続けて起動が止まる（実機で「カメラ・AI起動中...」のまま止まる原因）。
-  // そのため、映像をつなぐ前に待ち始め、すでに準備できていればすぐ進む
-  const metadataReady = new Promise((resolve, reject) => {
-    const done = () => { clearTimeout(timer); resolve(); };
-    const timer = setTimeout(() => {
-      const e = new Error("カメラの映像が届きませんでした");
-      e.name = "CameraTimeoutError";
-      reject(e);
-    }, 10000);
-    if (video.readyState >= 1) { done(); return; }
-    video.addEventListener("loadedmetadata", done, { once: true });
-    video.addEventListener("error", (err) => { clearTimeout(timer); reject(err); }, { once: true });
-  });
-  video.srcObject = currentStream;
+  try {
+    await attachAndPlay(stream);
+  } catch (err) {
+    if (err.name !== "CameraTimeoutError") throw err;
+    // 映像が届かない：カメラを一度閉じて、いちばん簡単な条件で開き直す（端末によっては細かい条件で開くと映像が来ないことがある）
+    console.warn("[CAM] 映像が届かないため、カメラを開き直します", err.detail || "");
+    try { stream.getTracks().forEach((t) => t.stop()); } catch { /* 続ける */ }
+    video.srcObject = null;
+    stream = await getCompatibleUserMedia({ video: { facingMode: "user" }, audio: false });
+    currentStream = stream;
+    await attachAndPlay(stream);
+  }
 
-  // ハードウェアがサポートする最大フレームレートの適用を試みる（iOS Safariなど非対応環境では安全にスキップ）
+  // 実効カメラ設定（解像度・アスペクト比・fps）をHUDに反映
   const track = stream.getVideoTracks()[0];
   if (track) {
-    try {
-      if (typeof track.getCapabilities === "function") {
-        const caps = track.getCapabilities();
-        console.log("[CAM CAPABILITIES]", caps);
-        const targetFps = caps.frameRate && caps.frameRate.max ? Math.min(60, caps.frameRate.max) : 60;
-        if (typeof track.applyConstraints === "function") {
-          await track.applyConstraints({
-            frameRate: { ideal: targetFps }
-          });
-        }
-      }
-    } catch (err) {
-      console.warn("FPS制約適用スキップ（端末非対応または制約適用不可）:", err);
-    }
-
-    // 実効カメラ設定（解像度・アスペクト比・fps）をHUDに反映
     try {
       if (typeof track.getSettings === "function") {
         const settings = track.getSettings();
@@ -3061,24 +3137,6 @@ async function startFrontCamera() {
     } catch (settingErr) {
       console.warn("カメラ設定取得スキップ:", settingErr);
     }
-  }
-
-  await metadataReady;
-  try {
-    await video.play();
-  } catch (playErr) {
-    console.warn("[CAM] video.play() 自動再生エラー:", playErr);
-    // 自動再生ポリシー制限（NotAllowedError や User interaction 必須）の場合はタップ起動フォールバックを要求
-    const isAutoplayBlocked =
-      playErr.name === "NotAllowedError" ||
-      playErr.name === "AbortError" ||
-      (playErr.message && playErr.message.toLowerCase().includes("interact"));
-    if (isAutoplayBlocked) {
-      const autoErr = new Error("画面をタップしてカメラを開始してください");
-      autoErr.name = "AutoplayBlockedError";
-      throw autoErr;
-    }
-    throw playErr;
   }
 
   // Canvas内部解像度をビデオ解像度に完全一致させる
@@ -3935,7 +3993,11 @@ function getCameraErrorMessage(error) {
   }
 
   if (errName === "CameraTimeoutError") {
-    return "カメラの映像が届きませんでした。ページを再読み込みして、もう一度スタートを押してください。";
+    if (error && (error.trackMuted || error.trackEnded)) {
+      // カメラは開けたのに映像が 1 コマも来ない：ほかのアプリ（ビデオ会議・別のタブなど）がカメラを使っていることが多い
+      return "カメラは開けましたが、映像が届きませんでした。ほかのアプリやタブ（ビデオ会議など）がカメラを使っていないか確かめて、それを閉じてからページを再読み込みしてください。";
+    }
+    return "カメラの映像が届きませんでした。ほかのアプリやタブがカメラを使っていないか確かめて、ページを再読み込みしてもう一度スタートを押してください。";
   }
 
   // そのほか：原因を調べられるよう、エラーの種類を添える
