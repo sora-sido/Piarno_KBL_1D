@@ -92,6 +92,7 @@ const samplers = {}; // name → { sampler, loaded, promise }
 /**
  * シンセサイザーの楽器を作る
  * def.synth：{ partials, envelope, filter, filterEnvelope, detune, pan, chorus, sub }
+ *  - phaser：Tone.Phaser の設定（frequency・octaves・baseFrequency・wet など）。うねりを付ける
  *  - sub：{ gain, voice }　1 オクターブ下の声（gain は上の声との音量差 dB、voice で波形などを上書き）
  *  - partials：倍音ごとの強さ（第1倍音=1）。この割合の波形を2つ、少しずらして重ねる（detune セント）
  *  - filter / filterEnvelope：ローパスフィルターと、その開き具合の時間変化（音の明るさの変化）
@@ -108,8 +109,14 @@ export function createSynth(def) {
   let node = out;
   if (sy.chorus) {
     const chorus = new Tone.Chorus(sy.chorus).start();
-    out.connect(chorus);
+    node.connect(chorus);
     node = chorus;
+  }
+  if (sy.phaser) {
+    // フェイザー：倍音の一部をゆっくり打ち消したり戻したりして「うわん、うわん」とうねらせる
+    const phaser = new Tone.Phaser(sy.phaser);
+    node.connect(phaser);
+    node = phaser;
   }
   node.toDestination();
   // デチューンした2つの声を重ねて、厚みと左右の広がりを出す
