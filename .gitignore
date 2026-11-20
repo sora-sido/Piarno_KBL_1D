@@ -27,3 +27,7 @@ dist-ssr
 # データ記録で保存したファイル（大きいので git には入れない）
 recordings/
 piarno_log_*
+
+# Python のキャッシュ（tools/*.py を実行・読み込みするとできる）
+__pycache__/
+*.pyc
