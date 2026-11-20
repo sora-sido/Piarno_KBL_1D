@@ -2,7 +2,7 @@
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
 <score-partwise version="4.0">
   <work><work-title>新宝島</work-title></work>
-  <identification><miscellaneous><miscellaneous-field name="source">利用者の書き起こし（右手メロディ・前奏〜後奏 164 小節・646 打鍵）。指番号は利用者の指定＋推定。右手の基本の位置は C5〜G5（アプリは homeOctave: 5 で読む）。tools/make_shin_takarajima.py で作成</miscellaneous-field></miscellaneous></identification>
+  <identification><miscellaneous><miscellaneous-field name="source">利用者の書き起こし（右手メロディ・前奏〜後奏 160 小節・628 打鍵。Aメロのもとの 35〜38 小節は削除）。指番号は利用者の指定＋推定。右手の基本の位置は C5〜G5（アプリは homeOctave: 5 で読む）。tools/make_shin_takarajima.py で作成</miscellaneous-field></miscellaneous></identification>
   <part-list>
     <score-part id="P1"><part-name>右手</part-name></score-part>
   </part-list>
@@ -1876,7 +1876,19 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
           <octave>5</octave>
         </pitch>
         <duration>2</duration>
@@ -1891,18 +1903,6 @@
           <step>C</step>
           <octave>5</octave>
         </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
@@ -1912,14 +1912,14 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <octave>5</octave>
+          <step>F</step>
+          <octave>4</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>5</fingering></technical>
+          <technical><fingering>1</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -1932,8 +1932,8 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
-          <octave>5</octave>
+          <step>G</step>
+          <octave>4</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
@@ -1943,10 +1943,17 @@
         </notations>
       </note>
       <note>
-        <rest/>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
+        <notations>
+          <technical><fingering>3</fingering></technical>
+        </notations>
       </note>
       <note>
         <pitch>
@@ -1961,12 +1968,6 @@
         </notations>
       </note>
       <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
         <pitch>
           <step>D</step>
           <octave>5</octave>
@@ -1979,25 +1980,34 @@
         </notations>
       </note>
       <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>5</fingering></technical>
         </notations>
       </note>
     </measure>
     <measure number="37">
+      <direction placement="above">
+        <direction-type><rehearsal>サビ</rehearsal></direction-type>
+      </direction>
       <note>
         <pitch>
           <step>G</step>
@@ -2148,19 +2158,7 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>2</duration>
@@ -2175,66 +2173,9 @@
           <step>C</step>
           <octave>5</octave>
         </pitch>
-        <duration>1</duration>
+        <duration>2</duration>
         <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="40">
-      <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>3</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
+        <type>quarter</type>
         <notations>
           <technical><fingering>1</fingering></technical>
         </notations>
@@ -2253,33 +2194,92 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>G</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
           <technical><fingering>5</fingering></technical>
         </notations>
       </note>
     </measure>
+    <measure number="40">
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+    </measure>
     <measure number="41">
-      <direction placement="above">
-        <direction-type><rehearsal>サビ</rehearsal></direction-type>
-      </direction>
       <note>
         <pitch>
           <step>G</step>
@@ -2522,14 +2522,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
       <note>
@@ -2540,14 +2540,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -2794,14 +2794,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
       <note>
@@ -2812,14 +2812,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -3066,14 +3066,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
       <note>
@@ -3084,14 +3084,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -3338,14 +3338,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
       <note>
@@ -3356,14 +3356,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -3610,14 +3610,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
       <note>
@@ -3628,18 +3628,21 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
     <measure number="61">
+      <direction placement="above">
+        <direction-type><rehearsal>間奏</rehearsal></direction-type>
+      </direction>
       <note>
         <pitch>
           <step>G</step>
@@ -3690,14 +3693,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
-          <octave>5</octave>
+          <step>G</step>
+          <octave>4</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>1</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -3827,13 +3830,13 @@
       <note>
         <pitch>
           <step>G</step>
-          <octave>5</octave>
+          <octave>4</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>5</fingering></technical>
+          <technical><fingering>1</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -3882,14 +3885,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
       <note>
@@ -3900,21 +3903,18 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
     <measure number="65">
-      <direction placement="above">
-        <direction-type><rehearsal>間奏</rehearsal></direction-type>
-      </direction>
       <note>
         <pitch>
           <step>G</step>
@@ -4101,14 +4101,14 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <octave>4</octave>
+          <step>F</step>
+          <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>1</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -4373,14 +4373,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
-          <octave>5</octave>
+          <step>G</step>
+          <octave>4</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>1</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -4509,14 +4509,14 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <octave>4</octave>
+          <step>F</step>
+          <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>1</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -4609,7 +4609,19 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
           <octave>5</octave>
         </pitch>
         <duration>2</duration>
@@ -4624,18 +4636,6 @@
           <step>C</step>
           <octave>5</octave>
         </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
@@ -4645,7 +4645,7 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
+          <step>F</step>
           <octave>4</octave>
         </pitch>
         <duration>1</duration>
@@ -4665,8 +4665,8 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
-          <octave>5</octave>
+          <step>G</step>
+          <octave>4</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
@@ -4676,10 +4676,17 @@
         </notations>
       </note>
       <note>
-        <rest/>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
+        <notations>
+          <technical><fingering>3</fingering></technical>
+        </notations>
       </note>
       <note>
         <pitch>
@@ -4694,12 +4701,6 @@
         </notations>
       </note>
       <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
         <pitch>
           <step>D</step>
           <octave>5</octave>
@@ -4712,25 +4713,34 @@
         </notations>
       </note>
       <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>5</fingering></technical>
         </notations>
       </note>
     </measure>
     <measure number="77">
+      <direction placement="above">
+        <direction-type><rehearsal>サビ2</rehearsal></direction-type>
+      </direction>
       <note>
         <pitch>
           <step>G</step>
@@ -4881,19 +4891,7 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>2</duration>
@@ -4908,66 +4906,9 @@
           <step>C</step>
           <octave>5</octave>
         </pitch>
-        <duration>1</duration>
+        <duration>2</duration>
         <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="80">
-      <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>3</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
+        <type>quarter</type>
         <notations>
           <technical><fingering>1</fingering></technical>
         </notations>
@@ -4986,33 +4927,92 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>G</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
           <technical><fingering>5</fingering></technical>
         </notations>
       </note>
     </measure>
+    <measure number="80">
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+    </measure>
     <measure number="81">
-      <direction placement="above">
-        <direction-type><rehearsal>サビ2</rehearsal></direction-type>
-      </direction>
       <note>
         <pitch>
           <step>G</step>
@@ -5255,14 +5255,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
       <note>
@@ -5273,14 +5273,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -5527,14 +5527,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
       <note>
@@ -5545,14 +5545,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -5799,14 +5799,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
       <note>
@@ -5817,14 +5817,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -6015,14 +6015,14 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>5</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -6071,14 +6071,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
       <note>
@@ -6089,14 +6089,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -6559,14 +6559,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>G</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>5</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -6795,7 +6795,19 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
           <octave>5</octave>
         </pitch>
         <duration>2</duration>
@@ -6810,18 +6822,6 @@
           <step>C</step>
           <octave>5</octave>
         </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
@@ -6831,14 +6831,14 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <octave>5</octave>
+          <step>F</step>
+          <octave>4</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>5</fingering></technical>
+          <technical><fingering>1</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -6851,8 +6851,8 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
-          <octave>5</octave>
+          <step>G</step>
+          <octave>4</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
@@ -6862,10 +6862,17 @@
         </notations>
       </note>
       <note>
-        <rest/>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
+        <notations>
+          <technical><fingering>3</fingering></technical>
+        </notations>
       </note>
       <note>
         <pitch>
@@ -6880,12 +6887,6 @@
         </notations>
       </note>
       <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
         <pitch>
           <step>D</step>
           <octave>5</octave>
@@ -6898,25 +6899,34 @@
         </notations>
       </note>
       <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>5</fingering></technical>
         </notations>
       </note>
     </measure>
     <measure number="109">
+      <direction placement="above">
+        <direction-type><rehearsal>大サビ</rehearsal></direction-type>
+      </direction>
       <note>
         <pitch>
           <step>G</step>
@@ -7067,19 +7077,7 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>2</duration>
@@ -7094,66 +7092,9 @@
           <step>C</step>
           <octave>5</octave>
         </pitch>
-        <duration>1</duration>
+        <duration>2</duration>
         <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="112">
-      <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>3</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
+        <type>quarter</type>
         <notations>
           <technical><fingering>1</fingering></technical>
         </notations>
@@ -7172,33 +7113,92 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>G</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
           <technical><fingering>5</fingering></technical>
         </notations>
       </note>
     </measure>
+    <measure number="112">
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <rest/>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+    </measure>
     <measure number="113">
-      <direction placement="above">
-        <direction-type><rehearsal>大サビ</rehearsal></direction-type>
-      </direction>
       <note>
         <pitch>
           <step>G</step>
@@ -7441,14 +7441,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
       <note>
@@ -7459,14 +7459,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -7713,14 +7713,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
       <note>
@@ -7731,14 +7731,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -7985,14 +7985,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
       <note>
@@ -8003,14 +8003,14 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -8257,14 +8257,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
       <note>
@@ -8275,14 +8275,14 @@
       </note>
       <note>
         <pitch>
-          <step>F</step>
+          <step>D</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -8522,10 +8522,16 @@
         </notations>
       </note>
       <note>
-        <rest/>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
       </note>
       <note>
         <pitch>
@@ -8540,309 +8546,31 @@
         </notations>
       </note>
       <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
         <pitch>
-          <step>D</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>1</duration>
         <voice>1</voice>
         <type>eighth</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
     </measure>
     <measure number="133">
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>4</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="134">
-      <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="135">
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>5</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="136">
-      <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <rest/>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>4</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>1</duration>
-        <voice>1</voice>
-        <type>eighth</type>
-        <notations>
-          <technical><fingering>4</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="137">
       <direction placement="above">
         <direction-type><rehearsal>後奏</rehearsal></direction-type>
       </direction>
@@ -8859,7 +8587,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="138">
+    <measure number="134">
       <note>
         <pitch>
           <step>F</step>
@@ -8896,6 +8624,144 @@
         <notations>
           <tied type="start"/>
           <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+    </measure>
+    <measure number="135">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>half</type>
+        <notations>
+          <tied type="start"/>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+    </measure>
+    <measure number="136">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>6</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>half</type>
+        <dot/>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+    </measure>
+    <measure number="137">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+    </measure>
+    <measure number="138">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <tied type="start"/>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -8915,144 +8781,6 @@
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>4</duration>
-        <tie type="start"/>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <tied type="start"/>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="140">
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>6</duration>
-        <tie type="stop"/>
-        <voice>1</voice>
-        <type>half</type>
-        <dot/>
-        <notations>
-          <tied type="stop"/>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="141">
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>4</duration>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>4</duration>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="142">
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>4</duration>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <tie type="start"/>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <tied type="start"/>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="143">
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <tie type="stop"/>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <tied type="stop"/>
-        </notations>
-      </note>
-      <note>
-        <pitch>
           <step>D</step>
           <octave>5</octave>
         </pitch>
@@ -9088,7 +8816,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="144">
+    <measure number="140">
       <note>
         <pitch>
           <step>F</step>
@@ -9128,7 +8856,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="145">
+    <measure number="141">
       <note>
         <pitch>
           <step>C</step>
@@ -9170,7 +8898,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="146">
+    <measure number="142">
       <note>
         <pitch>
           <step>G</step>
@@ -9198,7 +8926,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="147">
+    <measure number="143">
       <note>
         <pitch>
           <step>G</step>
@@ -9225,7 +8953,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="148">
+    <measure number="144">
       <note>
         <pitch>
           <step>C</step>
@@ -9264,7 +8992,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="149">
+    <measure number="145">
       <note>
         <pitch>
           <step>G</step>
@@ -9278,7 +9006,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="150">
+    <measure number="146">
       <note>
         <pitch>
           <step>F</step>
@@ -9315,6 +9043,144 @@
         <notations>
           <tied type="start"/>
           <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+    </measure>
+    <measure number="147">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>half</type>
+        <notations>
+          <tied type="start"/>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+    </measure>
+    <measure number="148">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>6</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>half</type>
+        <dot/>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+    </measure>
+    <measure number="149">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+    </measure>
+    <measure number="150">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <tied type="start"/>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -9334,9 +9200,35 @@
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <dot/>
+        <notations>
+          <technical><fingering>3</fingering></technical>
+        </notations>
+      </note>
+    </measure>
+    <measure number="152">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>4</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
         </pitch>
         <duration>2</duration>
         <voice>1</voice>
@@ -9347,44 +9239,26 @@
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>4</duration>
-        <tie type="start"/>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <tied type="start"/>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="152">
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>6</duration>
-        <tie type="stop"/>
-        <voice>1</voice>
-        <type>half</type>
-        <dot/>
-        <notations>
-          <tied type="stop"/>
-        </notations>
-      </note>
-      <note>
-        <pitch>
           <step>F</step>
-          <octave>4</octave>
+          <octave>5</octave>
         </pitch>
         <duration>2</duration>
         <voice>1</voice>
         <type>quarter</type>
         <notations>
-          <technical><fingering>1</fingering></technical>
+          <technical><fingering>4</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -9392,53 +9266,39 @@
       <note>
         <pitch>
           <step>G</step>
-          <octave>4</octave>
+          <octave>5</octave>
         </pitch>
-        <duration>4</duration>
+        <duration>8</duration>
         <voice>1</voice>
-        <type>half</type>
+        <type>whole</type>
         <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>4</duration>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
+          <technical><fingering>5</fingering></technical>
         </notations>
       </note>
     </measure>
     <measure number="154">
       <note>
         <pitch>
-          <step>C</step>
+          <step>F</step>
           <octave>5</octave>
         </pitch>
         <duration>4</duration>
         <voice>1</voice>
         <type>half</type>
         <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>4</fingering></technical>
         </notations>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
+          <step>D</step>
+          <octave>5</octave>
         </pitch>
         <duration>2</duration>
         <voice>1</voice>
         <type>quarter</type>
         <notations>
-          <technical><fingering>1</fingering></technical>
+          <technical><fingering>2</fingering></technical>
         </notations>
       </note>
       <note>
@@ -9452,7 +9312,7 @@
         <type>quarter</type>
         <notations>
           <tied type="start"/>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>1</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -9472,65 +9332,57 @@
       </note>
       <note>
         <pitch>
-          <step>D</step>
-          <octave>5</octave>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
         </pitch>
-        <duration>6</duration>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations>
+          <technical><fingering>2</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
         <voice>1</voice>
         <type>half</type>
-        <dot/>
         <notations>
-          <technical><fingering>3</fingering></technical>
+          <tied type="start"/>
+          <technical><fingering>1</fingering></technical>
         </notations>
       </note>
     </measure>
     <measure number="156">
       <note>
         <pitch>
-          <step>F</step>
-          <octave>5</octave>
+          <step>G</step>
+          <octave>4</octave>
         </pitch>
-        <duration>2</duration>
+        <duration>6</duration>
+        <tie type="stop"/>
         <voice>1</voice>
-        <type>quarter</type>
+        <type>half</type>
+        <dot/>
         <notations>
-          <technical><fingering>4</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
+          <tied type="stop"/>
         </notations>
       </note>
       <note>
         <pitch>
           <step>F</step>
-          <octave>5</octave>
+          <octave>4</octave>
         </pitch>
         <duration>2</duration>
         <voice>1</voice>
         <type>quarter</type>
         <notations>
-          <technical><fingering>4</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
+          <technical><fingering>1</fingering></technical>
         </notations>
       </note>
     </measure>
@@ -9538,154 +9390,30 @@
       <note>
         <pitch>
           <step>G</step>
-          <octave>5</octave>
+          <octave>4</octave>
         </pitch>
-        <duration>8</duration>
+        <duration>4</duration>
         <voice>1</voice>
-        <type>whole</type>
+        <type>half</type>
         <notations>
-          <technical><fingering>5</fingering></technical>
+          <technical><fingering>1</fingering></technical>
+        </notations>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <notations>
+          <technical><fingering>1</fingering></technical>
         </notations>
       </note>
     </measure>
     <measure number="158">
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>4</duration>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <technical><fingering>4</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>D</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <tie type="start"/>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <tied type="start"/>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="159">
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>2</duration>
-        <tie type="stop"/>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <tied type="stop"/>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>2</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>4</duration>
-        <tie type="start"/>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <tied type="start"/>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="160">
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>6</duration>
-        <tie type="stop"/>
-        <voice>1</voice>
-        <type>half</type>
-        <dot/>
-        <notations>
-          <tied type="stop"/>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>2</duration>
-        <voice>1</voice>
-        <type>quarter</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="161">
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>4</duration>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>4</duration>
-        <voice>1</voice>
-        <type>half</type>
-        <notations>
-          <technical><fingering>1</fingering></technical>
-        </notations>
-      </note>
-    </measure>
-    <measure number="162">
       <note>
         <pitch>
           <step>C</step>
@@ -9724,7 +9452,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="163">
+    <measure number="159">
       <note>
         <pitch>
           <step>F</step>
@@ -9774,7 +9502,7 @@
         </notations>
       </note>
     </measure>
-    <measure number="164">
+    <measure number="160">
       <note>
         <pitch>
           <step>G</step>

@@ -748,7 +748,7 @@ export const MARY_HAD_A_LITTLE_LAMB_SEQUENCE = [
 
 // 『新宝島』は楽譜ファイル songs/shin_takarajima.musicxml から読み込む
 // （楽譜ソフトで直して書き出し直せば、そのままアプリに反映される。読み込み方は musicxml-song.js）
-// 中身は利用者の書き起こし（前奏〜後奏 164 小節・646 打鍵。tools/make_shin_takarajima.py で作成）。
+// 中身は利用者の書き起こし（前奏〜後奏 160 小節・628 打鍵。tools/make_shin_takarajima.py で作成）。
 // 指番号は楽譜の運指記号を使う。右手の基本の位置は C5〜G5 なので homeOctave: 5 で読み、
 // それより低い音（G4・F4 など）には音名の下に点が付く
 const SHIN_TAKARAJIMA_SCORE = parseMusicXmlMelody(shinTakarajimaXml, { homeOctave: 5 });
