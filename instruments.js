@@ -9,7 +9,7 @@
  *
  * 音源の出典（くわしくは public/samples/CREDITS.md）
  *  - violin / cello / trumpet / tuba：tonejs-instruments（Nicholaus Brosowsky, MIT）。録音は VSCO 2 Community Edition など
- *  - music_box / harpsichord：FluidR3_GM（Frank Wen）を midi-js-soundfonts（Benjamin Gleitzman）で mp3 にしたもの（CC BY 3.0）
+ *  - music_box / harpsichord / electric_piano_1 / electric_piano_2：FluidR3_GM（Frank Wen）を midi-js-soundfonts（Benjamin Gleitzman）で mp3 にしたもの（CC BY 3.0）
  */
 import * as Tone from "tone";
 
@@ -25,7 +25,10 @@ function urlsOf(files) {
 
 const FLUID_SET = "A2 A3 A4 A5 A6 A7 C2 C3 C4 C5 C6 C7 Eb2 Eb3 Eb4 Eb5 Eb6 Eb7 Gb2 Gb3 Gb4 Gb5 Gb6 Gb7";
 
-/** 楽器の定義：サンプル、余韻（release）、音量（dB） */
+// 新宝島の音につける響き（リバーブ）：1.8 秒で消える響きを 3 割ほど混ぜる
+const SHIN_REVERB = { decay: 1.8, preDelay: 0.01, wet: 0.3 };
+
+/** 楽器の定義：サンプル、余韻（release）、音量（dB）、響き（reverb）。folder を省くと楽器名のフォルダ */
 export const INSTRUMENTS = {
   violin: {
     label: "ヴァイオリン",
@@ -57,6 +60,23 @@ export const INSTRUMENTS = {
     files: FLUID_SET,
     release: 1.2, volume: -12
   },
+  // 新宝島で選べる電子ピアノ（鳴らした瞬間が強く、自然に消えていく録音）。どちらも響き（リバーブ）付き
+  //  FluidR3_GM の Electric Piano 1（ローズ風・やわらかい）と Electric Piano 2（FM 風・きらきら）
+  //  録音の音量が小さいので、音量を上げてある
+  shin_ep1: {
+    label: "電子ピアノ（やわらかい）",
+    folder: "electric_piano_1",
+    files: FLUID_SET,
+    release: 1, volume: 6,
+    reverb: SHIN_REVERB
+  },
+  shin_ep2: {
+    label: "電子ピアノ（きらきら）",
+    folder: "electric_piano_2",
+    files: FLUID_SET,
+    release: 1, volume: 8,
+    reverb: SHIN_REVERB
+  },
   // 新宝島の鍵盤（シンセ）の音色
   // 1 回目（2026-11-20）：原曲を Demucs で分けた「other」の Aメロのリフに倍音を合わせた → 利用者から「キンキンして耳が痛い」
   //   原因：音のエネルギーの約 7 割が 800〜1600Hz（耳がいちばん敏感な帯域）の第2倍音に集中していた。低い音がほとんど無かった
@@ -67,14 +87,19 @@ export const INSTRUMENTS = {
   //   帯域ごとの音量（全体に対する dB：100-200/200-400/400-800/800-1.6k/1.6k-3.2k/3.2k-6.4kHz）
   //     利用者の音源 −14 / −6 / −12 / −6 / −5 / −9　→　このシンセ −17 / −7 / −8 / −4 / −7 / −13（1 回目は −37 / −17 / −7 / −2 / −10 / −23）
   //   録音そのものは使っていない（音色を測っただけ）
+  //  3 回目（2026-11-20）：「べたーっとした音」との声で、鳴らした瞬間が強く消えていく形にし、響き（リバーブ）を足した
   shin_keys: {
     label: "新宝島の鍵盤",
     volume: -12,
+    reverb: SHIN_REVERB,
     synth: {
       partials: [0.3, 1, 0.6, 0.5, 0.35, 0.25, 0.18, 0.13, 0.09, 0.06, 0.045, 0.03],
-      envelope: { attack: 0.008, decay: 0.18, sustain: 0.45, release: 0.25 },
+      // 鳴らした瞬間がいちばん強く、約 3 秒かけて消えていく（ピアノのような形。伸ばしている間ずっと同じ音量だと「べたー」と聞こえる）
+      // Tone.js の exponential（指数）だと最初の 1 秒で消えすぎたので linear（直線）にした
+      envelope: { attack: 0.003, decay: 3, sustain: 0, release: 1.2, decayCurve: "linear" },
       filter: { type: "lowpass", Q: 1, rolloff: -12 },
-      filterEnvelope: { attack: 0.005, decay: 0.25, sustain: 0.6, release: 0.2, baseFrequency: 3000, octaves: 1.0 },
+      // 鳴らした瞬間は明るく（約 4kHz まで）、0.6 秒ほどで落ち着いた明るさ（約 1.5kHz）になる
+      filterEnvelope: { attack: 0.002, decay: 0.6, sustain: 0.35, release: 1, baseFrequency: 900, octaves: 2.2 },
       detune: 5,
       pan: 0.6,
       chorus: { frequency: 0.8, delayTime: 4, depth: 0.5, spread: 180, wet: 0.35 },
@@ -88,6 +113,21 @@ export const INSTRUMENTS = {
 };
 
 const samplers = {}; // name → { sampler, loaded, promise }
+
+/**
+ * 楽器の音の出口。def.reverb があれば響き（リバーブ）を通してからスピーカーへ
+ * def.reverb：{ decay（響きが消えるまでの秒）, preDelay, wet（響きの割合 0〜1） }
+ * 返り値：{ input（楽器をつなぐ先）, ready（響きの準備ができたら解決） }
+ */
+function makeOutput(def, input) {
+  if (!def.reverb) {
+    input.toDestination();
+    return Promise.resolve();
+  }
+  const reverb = new Tone.Reverb(def.reverb).toDestination();
+  input.connect(reverb);
+  return reverb.ready;
+}
 
 /**
  * シンセサイザーの楽器を作る
@@ -118,7 +158,7 @@ export function createSynth(def) {
     node.connect(phaser);
     node = phaser;
   }
-  node.toDestination();
+  const ready = makeOutput(def, node);
   // デチューンした2つの声を重ねて、厚みと左右の広がりを出す
   const layers = [-1, 1].map((sign) => {
     const ps = new Tone.PolySynth(Tone.MonoSynth, { ...voice, detune: sign * (sy.detune || 0) });
@@ -144,6 +184,7 @@ export function createSynth(def) {
   }
   const down = (n) => Tone.Frequency(n).transpose(-12).toNote();
   return {
+    ready,
     triggerAttackRelease(notes, dur, time, velocity) {
       layers.forEach((l) => l.triggerAttackRelease(notes, dur, time, velocity));
       if (sub) sub.triggerAttackRelease(Array.isArray(notes) ? notes.map(down) : down(notes), dur, time, velocity);
@@ -158,29 +199,41 @@ export function loadInstrument(name) {
   if (samplers[name]) return samplers[name].promise;
   if (def.synth) {
     // シンセは読み込むファイルが無いので、すぐ使える
-    const entry = { sampler: createSynth(def), loaded: true, promise: Promise.resolve(true) };
+    const entry = { sampler: createSynth(def), loaded: false, promise: null };
+    // 響き（リバーブ）の準備は一瞬で終わる。終わるまではピアノで代わりに鳴らす
+    entry.promise = entry.sampler.ready.then(() => {
+      entry.loaded = true;
+      console.log(`[AUDIO] ${def.label}（シンセ）を用意しました`);
+      return true;
+    }).catch((e) => {
+      console.warn(`[AUDIO] ${def.label} を用意できません（ピアノで代用します）`, e);
+      return false;
+    });
     samplers[name] = entry;
-    console.log(`[AUDIO] ${def.label}（シンセ）を用意しました`);
     return entry.promise;
   }
   const entry = { sampler: null, loaded: false, promise: null };
   entry.promise = new Promise((resolve) => {
     try {
+      let reverbReady = Promise.resolve();
       entry.sampler = new Tone.Sampler({
         urls: urlsOf(def.files),
-        baseUrl: `${BASE}${name}/`,
+        baseUrl: `${BASE}${def.folder || name}/`,
         release: def.release,
         volume: def.volume,
         onload: () => {
-          entry.loaded = true;
-          console.log(`[AUDIO] ${def.label} の音源を読み込みました`);
-          resolve(true);
+          reverbReady.then(() => {
+            entry.loaded = true;
+            console.log(`[AUDIO] ${def.label} の音源を読み込みました`);
+            resolve(true);
+          });
         },
         onerror: (e) => {
           console.warn(`[AUDIO] ${def.label} の音源を読み込めません（ピアノで代用します）`, e);
           resolve(false);
         }
-      }).toDestination();
+      });
+      reverbReady = makeOutput(def, entry.sampler);
     } catch (e) {
       console.warn(`[AUDIO] ${def.label} を用意できません`, e);
       resolve(false);

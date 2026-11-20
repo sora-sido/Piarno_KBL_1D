@@ -963,7 +963,9 @@ export function beginPositioning(onStart) {
 let pipStatusFrame = 0;
 let pipBadSince = null;
 let driftDismissedSong = null;      // 矢印をタップして非表示にした曲
-let shinSound = "synth";             // 設定パネルの「新宝島の音」（"synth" / "piano"）
+let shinSound = "synth";             // 設定パネルの「新宝島の音」（"piano" / "synth" / "ep1" / "ep2"）
+// 「新宝島の音」の選択肢 → 鳴らす楽器（instruments.js）。piano は前と同じピアノ
+const SHIN_SOUND_INSTRUMENT = { synth: "shin_keys", ep1: "shin_ep1", ep2: "shin_ep2" };
 let driftWarningsEnabled = true;    // 設定パネルの「手のずれの警告」
 const DRIFT_SHOW_MS = 2500;          // ずれがこの時間続いたら知らせる
 const LOST_SHOW_MS = 3000;           // 手を見失ってこの時間たったら知らせる
@@ -2006,6 +2008,10 @@ window.addEventListener("pageshow", () => { lastNotesSignature = ""; });
 // 開発サーバーでのみ使う確認用フック（本番ビルドでは除去される）：打鍵したことにして1音進める
 if (import.meta.env && import.meta.env.DEV) {
   window.__piarnoTest = {
+    // 打鍵したことにする（音の確認用）
+    hit() {
+      songHit("test");
+    },
     advance() {
       triggerNoteHitEffect(currentSongStep);
       currentSongStep = Math.min(currentSongStep + 1, currentSequence.length - 1);
@@ -3329,6 +3335,7 @@ const BASS_VELOCITY = 0.7;
 function preloadSongInstruments(song) {
   const ins = song && song.instruments;
   if (!ins) return;
+  if (song.soundChoice && SHIN_SOUND_INSTRUMENT[shinSound]) loadInstrument(SHIN_SOUND_INSTRUMENT[shinSound]);
   [...(ins.melody || []), ins.chord, ins.bass].forEach((name) => {
     if (name && name !== "piano") loadInstrument(name);
   });
@@ -3421,8 +3428,12 @@ function songHit(source, detail = "") {
     finger: currentTarget.fingerKey, note: currentTarget.rightNote || currentTarget.note
   });
 
-  const hitSong = SONGS[currentSongId];
+  let hitSong = SONGS[currentSongId];
   const usePianoInstead = hitSong && hitSong.soundChoice && shinSound === "piano";
+  if (hitSong && hitSong.soundChoice && !usePianoInstead) {
+    // 設定パネルで選んだ音で鳴らす
+    hitSong = { ...hitSong, instruments: { melody: [SHIN_SOUND_INSTRUMENT[shinSound] || "shin_keys"] } };
+  }
   if (hitSong && hitSong.instruments && !isLatencyMode() && !usePianoInstead) {
     // 楽譜ファイルの曲：曲に合わせた音色でメロディを鳴らし、次の打鍵までの伴奏を楽譜どおりの間隔で流す
     playScoreStep(currentTarget, hitSong);
@@ -4247,7 +4258,8 @@ const SHIN_SOUND_STORAGE_KEY = "piarno_shin_sound";
 const shinSoundBtns = document.querySelectorAll("[data-shin-sound]");
 if (shinSoundBtns.length) {
   try {
-    shinSound = localStorage.getItem(SHIN_SOUND_STORAGE_KEY) === "piano" ? "piano" : "synth";
+    const saved = localStorage.getItem(SHIN_SOUND_STORAGE_KEY);
+    shinSound = saved === "piano" || SHIN_SOUND_INSTRUMENT[saved] ? saved : "synth";
   } catch {
     shinSound = "synth";
   }
@@ -4263,7 +4275,8 @@ if (shinSoundBtns.length) {
     if (shinSound === "piano") {
       playTapSound("D5", false, { duration: "8n" });
     } else {
-      loadInstrument("shin_keys").then(() => playOn("shin_keys", "D5", 0.4, Tone.now(), MELODY_VELOCITY));
+      const name = SHIN_SOUND_INSTRUMENT[shinSound];
+      loadInstrument(name).then(() => playOn(name, "D5", 0.4, Tone.now(), MELODY_VELOCITY));
     }
   }));
 }
