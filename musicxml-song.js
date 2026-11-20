@@ -56,7 +56,8 @@ function directChild(el, name) {
  * @param {string} xmlText MusicXML（score-partwise）の中身
  * @param {object} [opt]
  * @param {number} [opt.homeOctave=4] 指番号の規則で ド=1 とするオクターブ（4 なら C4〜G4 が 1〜5）
- * @returns {{ title: string, notes: Array<object>, sections: string[], measures: [number, number] }}
+ * @returns {{ title: string, notes: Array<object>, sections: string[], measures: [number, number], bpm: number|null }}
+ *   2 つ目以降のパートがあれば伴奏として読み、各音に accomp（[{ note, midi, offset, dur }]、offset はその打鍵からの遅れ）を付ける
  */
 export function parseMusicXmlMelody(xmlText, opt = {}) {
   const homeOctave = opt.homeOctave ?? 4;
@@ -77,6 +78,7 @@ export function parseMusicXmlMelody(xmlText, opt = {}) {
   let firstMeasure = null;
   let lastMeasure = null;
   let endTime = 0;
+  let firstMeasureLen = null;
 
   for (const measure of part.getElementsByTagName("measure")) {
     const mno = Number(measure.getAttribute("number"));
@@ -139,6 +141,7 @@ export function parseMusicXmlMelody(xmlText, opt = {}) {
       }
     }
     // 小節の長さ：拍子どおりでなくても、実際に並んでいる音・休符の長さで進める
+    if (firstMeasureLen === null) firstMeasureLen = measureLen;
     time += measureLen;
     endTime = time;
   }
@@ -169,5 +172,97 @@ export function parseMusicXmlMelody(xmlText, opt = {}) {
       dur: ev.dur / perEighth
     };
   });
-  return { title, notes, sections, measures: [firstMeasure, lastMeasure] };
+  // 2 つ目以降のパートは伴奏として読み、各打鍵に「その打鍵から次の打鍵までに鳴る伴奏の音」を付ける
+  const parts = [...doc.getElementsByTagName("part")];
+  const accEvents = parts.slice(1).flatMap((p) => readAccompanimentPart(p));
+  if (accEvents.length) {
+    // accEvents の時刻は 8 分音符単位。notes[i].onset も同じ単位
+    accEvents.sort((a, b) => a.start - b.start);
+    let j = 0;
+    notes.forEach((n, i) => {
+      const next = notes[i + 1];
+      const from = i === 0 ? -Infinity : n.onset; // 曲頭の打鍵より前の伴奏は最初の打鍵で鳴らす
+      const to = next ? next.onset : Infinity;
+      const list = [];
+      while (j < accEvents.length && accEvents[j].start < to) {
+        const e = accEvents[j++];
+        if (e.start < from) continue;
+        list.push({ note: e.note, midi: e.midi, offset: Math.max(0, e.start - n.onset), dur: e.dur });
+      }
+      n.accomp = list;
+    });
+  }
+
+  // 拍子と弱起：ノーツの小節線を楽譜どおりに引くため（8 分音符 = 1）
+  const timeEl = part.getElementsByTagName("time")[0];
+  const beats = timeEl ? Number(childText(timeEl, "beats")) : 4;
+  const beatType = timeEl ? Number(childText(timeEl, "beat-type")) : 4;
+  const firstMeasureEl = part.getElementsByTagName("measure")[0];
+  let pickupLen = 0;
+  if (firstMeasureEl && firstMeasureEl.getAttribute("implicit") === "yes") {
+    pickupLen = firstMeasureLen / perEighth;
+  }
+  const meter = { barEighths: (beats * 8) / beatType, beatEighths: 8 / beatType, firstBarStart: pickupLen };
+
+  const tempoEl = [...doc.getElementsByTagName("sound")].find((el) => el.getAttribute("tempo"));
+  const bpm = tempoEl ? Number(tempoEl.getAttribute("tempo")) : null;
+
+  return { title, notes, sections, measures: [firstMeasure, lastMeasure], bpm, meter };
+}
+
+/**
+ * 伴奏パートの音をすべて取り出す（和音・複数の声部もそのまま。タイは 1 つの音にまとめる）
+ * @returns {Array<{start:number, dur:number, note:string, midi:number}>} 時刻と長さは 8 分音符 = 1
+ */
+function readAccompanimentPart(part) {
+  let divisions = 1;
+  let time = 0;
+  const events = [];
+  const openTies = new Map(); // midi → まだタイが続いている音
+  for (const measure of part.getElementsByTagName("measure")) {
+    let pos = time;
+    let measureLen = 0;
+    let lastStart = pos;
+    for (const el of measure.children) {
+      if (el.tagName === "attributes") {
+        const d = childText(el, "divisions");
+        if (d) divisions = Number(d);
+      } else if (el.tagName === "backup") {
+        pos -= Number(childText(el, "duration") || 0);
+      } else if (el.tagName === "forward") {
+        pos += Number(childText(el, "duration") || 0);
+        measureLen = Math.max(measureLen, pos - time);
+      } else if (el.tagName === "note") {
+        if (directChild(el, "grace")) continue;
+        const dur = Number(childText(el, "duration") || 0);
+        const isChord = !!directChild(el, "chord");
+        const start = isChord ? lastStart : pos;
+        if (!isChord) {
+          lastStart = pos;
+          pos += dur;
+        }
+        measureLen = Math.max(measureLen, pos - time);
+        if (directChild(el, "rest")) continue;
+        const pitch = directChild(el, "pitch");
+        const step = childText(pitch, "step");
+        const alter = Number(childText(pitch, "alter") || 0);
+        const octave = Number(childText(pitch, "octave"));
+        const midi = midiOf(step, alter, octave);
+        const ties = [...el.getElementsByTagName("tie")].map((t) => t.getAttribute("type"));
+        const prev = openTies.get(midi);
+        if (ties.includes("stop") && prev) {
+          prev.dur += dur;
+          if (!ties.includes("start")) openTies.delete(midi);
+          continue;
+        }
+        const nameAlter = alter < 0 ? "b" : alter > 0 ? "#" : "";
+        const ev = { start: start, dur, note: `${step}${nameAlter}${octave}`, midi };
+        events.push(ev);
+        if (ties.includes("start")) openTies.set(midi, ev);
+      }
+    }
+    time += measureLen;
+  }
+  const perEighth = divisions / 2;
+  return events.map((e) => ({ ...e, start: e.start / perEighth, dur: e.dur / perEighth }));
 }

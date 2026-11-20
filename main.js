@@ -10,6 +10,12 @@ import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import * as Tone from "tone";
 import { parseMusicXmlMelody, midiOf, freqOfMidi } from "./musicxml-song.js";
 import shinTakarajimaXml from "./songs/shin_takarajima.musicxml?raw";
+import entertainerXml from "./songs/the_entertainer.musicxml?raw";
+import canonXml from "./songs/canon.musicxml?raw";
+import saintsXml from "./songs/saints.musicxml?raw";
+import happyBirthdayXml from "./songs/happy_birthday.musicxml?raw";
+import furEliseXml from "./songs/fur_elise.musicxml?raw";
+import { loadInstrument, playInstrument, isInstrumentReady } from "./instruments.js";
 import { setupRecordButton, onPlayStart, onHit as onRecordHit, recordFrame, isRecording } from "./recorder.js";
 import { startPositioning, updatePositioning, isPositioning, evaluateDrift, directionGraphic } from "./positioning.js";
 import { setupLatencyButton, isLatencyMode, onLatencyTap } from "./latency.js";
@@ -747,6 +753,26 @@ export const MARY_HAD_A_LITTLE_LAMB_SEQUENCE = [
 const SHIN_TAKARAJIMA_SCORE = parseMusicXmlMelody(shinTakarajimaXml, { homeOctave: 4 });
 export const SHIN_TAKARAJIMA_SEQUENCE = SHIN_TAKARAJIMA_SCORE.notes;
 
+// ---- 楽譜ファイルから読み込む曲（本来のピアノの指番号のまま、音の高さは楽譜どおりに変わる） ----
+// 楽譜は songs/*.musicxml（作り方は tools/make_scores.py）。2 つ目のパートが伴奏
+// instruments：曲に合わせた音色。melody は右手で弾く音、chord は伴奏の和音、bass は伴奏の低音
+//   （bassBelow より低い伴奏の音を bass の楽器で鳴らす）。"piano" は Salamander Grand Piano
+const SCORE_SONGS = [
+  { id: "the_entertainer", title: "エンターテイナー", xml: entertainerXml,
+    instruments: { melody: ["piano"], chord: "piano" } },
+  { id: "canon", title: "カノン", xml: canonXml,
+    instruments: { melody: ["violin"], chord: "harpsichord", bass: "cello", bassBelow: "E3" } },
+  { id: "saints", title: "聖者の行進", xml: saintsXml,
+    instruments: { melody: ["trumpet"], chord: "piano", bass: "tuba", bassBelow: "E3" } },
+  { id: "happy_birthday", title: "ハッピーバースデー", xml: happyBirthdayXml,
+    instruments: { melody: ["music_box"], chord: "music_box" } },
+  { id: "fur_elise", title: "エリーゼのために", xml: furEliseXml,
+    instruments: { melody: ["piano"], chord: "piano" } }
+].map((def) => {
+  const score = parseMusicXmlMelody(def.xml, { homeOctave: 4 });
+  return { ...def, score, sequence: score.notes, bpm: score.bpm || 90 };
+});
+
 // ---- リズム（8分音符=1）。落ちてくるノーツの間隔と長さに使う ----
 // よろこびのうた：4分音符=2。4・8・16小節目は「付点4分・8分・2分」、10・11小節目に8分音符2つ
 const ODE_TO_JOY_RHYTHM = [
@@ -784,6 +810,7 @@ function annotateOnsets(seq) {
 applyRhythm(ODE_TO_JOY_SEQUENCE, ODE_TO_JOY_RHYTHM);
 applyRhythm(MARY_HAD_A_LITTLE_LAMB_SEQUENCE, MARY_RHYTHM);
 [ODE_TO_JOY_SEQUENCE, MARY_HAD_A_LITTLE_LAMB_SEQUENCE, SHIN_TAKARAJIMA_SEQUENCE].forEach(annotateOnsets);
+SCORE_SONGS.forEach((def) => annotateOnsets(def.sequence));
 
 // フリー演奏で各指が鳴らす音
 export const FREE_PLAY_NOTES = [
@@ -818,6 +845,15 @@ export const SONGS = {
     sequence: SHIN_TAKARAJIMA_SEQUENCE,
     firstMeasure: SHIN_TAKARAJIMA_SCORE.measures[0]
   },
+  ...Object.fromEntries(SCORE_SONGS.map((def) => [def.id, {
+    id: def.id,
+    title: def.title,
+    sequence: def.sequence,
+    firstMeasure: Math.max(1, def.score.measures[0]),
+    instruments: def.instruments,
+    bpm: def.bpm,
+    meter: def.score.meter
+  }])),
   // フリー演奏：楽譜なし。5本の指それぞれが決まった音を鳴らす（親指ド・人差し指レ・中指ミ・薬指ファ・小指ソ）
   free: {
     id: "free",
@@ -1089,6 +1125,7 @@ export function selectSong(songId, withCountdown = true) {
   currentSongId = canonicalId;
   currentSequence = targetSong.sequence;
   currentSongStep = 0;
+  preloadSongInstruments(targetSong);
   if (typeof noteProgressMap !== "undefined") {
     noteProgressMap.clear();
   }
@@ -1631,11 +1668,14 @@ function drawRhythmHighway(now) {
   const firstE = Math.ceil(viewOnset - 1);
   // 曲の最初の小節の番号（楽譜の途中から始まる曲もある）
   const firstBar = (SONGS[currentSongId] && SONGS[currentSongId].firstMeasure) || 1;
+  // 拍子（楽譜から読んだ曲は楽譜どおり。それ以外は 4/4・弱起なし）
+  const meter = (SONGS[currentSongId] && SONGS[currentSongId].meter) || { barEighths: 8, beatEighths: 2, firstBarStart: 0 };
   for (let e = firstE; ; e++) {
     const y = yOf(e);
     if (y < topY) break;
     if (y > hitY) continue;
-    if (e % 8 === 0) {
+    const fromBar1 = e - meter.firstBarStart;
+    if (fromBar1 >= 0 && fromBar1 % meter.barEighths === 0) {
       ctx.strokeStyle = "rgba(255,255,255,0.28)";
       ctx.lineWidth = 1.2;
       ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + width, y); ctx.stroke();
@@ -1645,13 +1685,13 @@ function drawRhythmHighway(now) {
       if (left >= 26) {
         ctx.textAlign = "right";
         ctx.textBaseline = "middle";
-        ctx.fillText(`${e / 8 + firstBar}`, left - 4, y);
+        ctx.fillText(`${fromBar1 / meter.barEighths + firstBar}`, left - 4, y);
       } else {
         ctx.textAlign = "left";
         ctx.textBaseline = "bottom";
-        ctx.fillText(`${e / 8 + firstBar}`, left + 3, y - 2);
+        ctx.fillText(`${fromBar1 / meter.barEighths + firstBar}`, left + 3, y - 2);
       }
-    } else if (e % 2 === 0) {
+    } else if (fromBar1 % meter.beatEighths === 0) {
       ctx.strokeStyle = "rgba(255,255,255,0.08)";
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + width, y); ctx.stroke();
@@ -3213,6 +3253,79 @@ function selectRightHandLandmarks(results) {
  * @param {object} results
  */
 // ==========================================================================
+// 楽譜ファイルの曲の音（曲ごとの音色・伴奏）
+// ==========================================================================
+const MELODY_VELOCITY = 0.9;
+const CHORD_VELOCITY = 0.45;
+const BASS_VELOCITY = 0.7;
+
+/** 曲で使う楽器を先に読み込んでおく（ピアノは起動時に読み込み済み） */
+function preloadSongInstruments(song) {
+  const ins = song && song.instruments;
+  if (!ins) return;
+  [...(ins.melody || []), ins.chord, ins.bass].forEach((name) => {
+    if (name && name !== "piano") loadInstrument(name);
+  });
+}
+
+/** ピアノ（Salamander）で、指定した時刻に鳴らす。読み込み前は代わりの合成音 */
+function playPianoAt(note, durationSec, time, velocity) {
+  if (isSamplerLoaded && pianoSampler) {
+    try {
+      pianoSampler.triggerAttackRelease(note, durationSec, time, velocity);
+      return;
+    } catch (e) {
+      console.warn("[AUDIO] Sampler 発音エラー、フォールバック合成を使用:", e);
+    }
+  }
+  const delayMs = Math.max(0, (time - Tone.now()) * 1000);
+  const notes = Array.isArray(note) ? note : [note];
+  setTimeout(() => notes.forEach((n) => playSynthFallback(noteNameToFreq(n) || 440, durationSec)), delayMs);
+}
+
+/** 楽器で鳴らす（まだ読み込み中ならピアノで代用） */
+function playOn(name, note, durationSec, time, velocity) {
+  if (name && name !== "piano" && isInstrumentReady(name)) {
+    if (playInstrument(name, note, durationSec, time, velocity)) return;
+  }
+  playPianoAt(note, durationSec, time, velocity);
+}
+
+/**
+ * 楽譜ファイルの曲の 1 打鍵ぶんの音：メロディ＋（次の打鍵までに鳴る）伴奏
+ * 伴奏は楽譜のテンポ（bpm）で、打鍵の瞬間からの遅れを付けて鳴らす
+ */
+function playScoreStep(target, song) {
+  ensureAudioContext();
+  notifySoundPlayed();
+  tapCount++;
+  if (tapCountVal) tapCountVal.textContent = `${tapCount}`;
+
+  const ins = song.instruments;
+  const secPerEighth = 60 / (song.bpm || 90) / 2;
+  const now = Tone.now();
+  const melodyNote = target.rightNote;
+  const melodySec = Math.min(4, Math.max(0.3, (target.dur || 2) * secPerEighth));
+  (ins.melody || ["piano"]).forEach((name) => playOn(name, melodyNote, melodySec, now, MELODY_VELOCITY));
+
+  if (!target.accomp || !target.accomp.length) return;
+  const bassBelow = ins.bass && ins.bassBelow ? noteNameToMidi(ins.bassBelow) : null;
+  target.accomp.forEach((a) => {
+    const time = now + a.offset * secPerEighth;
+    const sec = Math.min(4, Math.max(0.2, a.dur * secPerEighth));
+    const isBass = bassBelow !== null && a.midi < bassBelow;
+    playOn(isBass ? ins.bass : ins.chord, a.note, sec, time, isBass ? BASS_VELOCITY : CHORD_VELOCITY);
+  });
+}
+
+/** 音名（"E3"・"F#2"・"Bb3"）→ MIDI ノート番号 */
+function noteNameToMidi(name) {
+  const m = /^([A-G])([#b]?)(-?\d)$/.exec(name || "");
+  if (!m) return null;
+  return midiOf(m[1], m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0, Number(m[3]));
+}
+
+// ==========================================================================
 // 打鍵したときの曲の進行
 // ==========================================================================
 /**
@@ -3242,11 +3355,17 @@ function songHit(source, detail = "") {
     finger: currentTarget.fingerKey, note: currentTarget.rightNote || currentTarget.note
   });
 
-  // 右手正解メロディ音を発音（クリアなアタック）
-  playTapSound(currentTarget.rightNote || currentTarget.freq, true, {
-    duration: "2n",
-    isBass: false
-  });
+  const hitSong = SONGS[currentSongId];
+  if (hitSong && hitSong.instruments && !isLatencyMode()) {
+    // 楽譜ファイルの曲：曲に合わせた音色でメロディを鳴らし、次の打鍵までの伴奏を楽譜どおりの間隔で流す
+    playScoreStep(currentTarget, hitSong);
+  } else {
+    // 右手正解メロディ音を発音（クリアなアタック）
+    playTapSound(currentTarget.rightNote || currentTarget.freq, true, {
+      duration: "2n",
+      isBass: false
+    });
+  }
 
   // 楽譜通りの左手自動伴奏（単音または和音）が設定されている場合は重ねて自動発音
   if (currentTarget.autoLeftNote) {
