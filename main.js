@@ -847,7 +847,9 @@ export const SONGS = {
     firstMeasure: SHIN_TAKARAJIMA_SCORE.measures[0],
     // 原曲の鍵盤の音色に合わせたシンセで鳴らす（instruments.js の shin_keys）。伴奏は無し
     instruments: { melody: ["shin_keys"] },
-    bpm: 156
+    bpm: 156,
+    // 設定パネルの「新宝島の音」で、前の音（ピアノ）とシンセを選べる
+    soundChoice: true
   },
   ...Object.fromEntries(SCORE_SONGS.map((def) => [def.id, {
     id: def.id,
@@ -961,6 +963,7 @@ export function beginPositioning(onStart) {
 let pipStatusFrame = 0;
 let pipBadSince = null;
 let driftDismissedSong = null;      // 矢印をタップして非表示にした曲
+let shinSound = "synth";             // 設定パネルの「新宝島の音」（"synth" / "piano"）
 let driftWarningsEnabled = true;    // 設定パネルの「手のずれの警告」
 const DRIFT_SHOW_MS = 2500;          // ずれがこの時間続いたら知らせる
 const LOST_SHOW_MS = 3000;           // 手を見失ってこの時間たったら知らせる
@@ -3419,7 +3422,8 @@ function songHit(source, detail = "") {
   });
 
   const hitSong = SONGS[currentSongId];
-  if (hitSong && hitSong.instruments && !isLatencyMode()) {
+  const usePianoInstead = hitSong && hitSong.soundChoice && shinSound === "piano";
+  if (hitSong && hitSong.instruments && !isLatencyMode() && !usePianoInstead) {
     // 楽譜ファイルの曲：曲に合わせた音色でメロディを鳴らし、次の打鍵までの伴奏を楽譜どおりの間隔で流す
     playScoreStep(currentTarget, hitSong);
   } else {
@@ -4236,6 +4240,32 @@ if (driftToggleBtn) {
     try { localStorage.setItem(DRIFT_WARNING_STORAGE_KEY, String(driftWarningsEnabled)); } catch { /* 保存できない環境 */ }
     updateDriftUI();
   });
+}
+
+// 新宝島の音：前の音（ピアノ）か、原曲の鍵盤に合わせたシンセか
+const SHIN_SOUND_STORAGE_KEY = "piarno_shin_sound";
+const shinSoundBtns = document.querySelectorAll("[data-shin-sound]");
+if (shinSoundBtns.length) {
+  try {
+    shinSound = localStorage.getItem(SHIN_SOUND_STORAGE_KEY) === "piano" ? "piano" : "synth";
+  } catch {
+    shinSound = "synth";
+  }
+  const updateShinSoundUI = () => shinSoundBtns.forEach((b) => b.setAttribute("aria-checked", String(b.dataset.shinSound === shinSound)));
+  updateShinSoundUI();
+  shinSoundBtns.forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    shinSound = b.dataset.shinSound;
+    try { localStorage.setItem(SHIN_SOUND_STORAGE_KEY, shinSound); } catch { /* 保存できない環境 */ }
+    updateShinSoundUI();
+    // 選んだ音を 1 音だけ試しに鳴らす（新宝島のリフの最初の音）
+    ensureAudioContext();
+    if (shinSound === "piano") {
+      playTapSound("D5", false, { duration: "8n" });
+    } else {
+      loadInstrument("shin_keys").then(() => playOn("shin_keys", "D5", 0.4, Tone.now(), MELODY_VELOCITY));
+    }
+  }));
 }
 
 // 画面右上のトラッキングライン表示切替ボタン

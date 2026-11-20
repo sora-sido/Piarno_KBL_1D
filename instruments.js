@@ -57,24 +57,32 @@ export const INSTRUMENTS = {
     files: FLUID_SET,
     release: 1.2, volume: -12
   },
-  // 新宝島の鍵盤（シンセ）の音色。原曲の録音から鍵盤のパートを音源分離（Demucs htdemucs_6s の「other」）で取り出し、
-  // Aメロのリフ（28〜60 秒・59 音）を測った値に合わせて作ったもの。録音そのものは使っていない
-  //  - 倍音：第2倍音が第1倍音より +6dB 強く、第3・4倍音は −4〜−6dB、第5倍音から上は −17〜−51dB と急に弱い
-  //  - 音量の形：叩いた瞬間に最大（10ms 以内）→ 100ms 後に約 −8dB → 8 分音符ほどで減衰
-  //  - 明るさ：鳴り始めが少し明るく、伸ばすうちに暗くなる（スペクトル重心 / 基本周波数 4.05 → 3.34）
-  //  - 左右の広がりが大きい（左右の相関 0.12）→ 2 つの声を少しずらして左右に振り、コーラスで広げる
-  //  同じリフをこのシンセで鳴らして同じ方法で測ると、第2〜10倍音の強さの差は平均 1.2dB、左右の相関 0.07
+  // 新宝島の鍵盤（シンセ）の音色
+  // 1 回目（2026-11-20）：原曲を Demucs で分けた「other」の Aメロのリフに倍音を合わせた → 利用者から「キンキンして耳が痛い」
+  //   原因：音のエネルギーの約 7 割が 800〜1600Hz（耳がいちばん敏感な帯域）の第2倍音に集中していた。低い音がほとんど無かった
+  // 2 回目（2026-11-20）：利用者が DAW で取り出した鍵盤パート（other_mixed）の Aメロ（32〜60 秒）の帯域ごとの音量に合わせて作り直した
+  //   - 1 オクターブ下の声（sub）を足して、200〜400Hz の太さを出す（利用者の音源には 1 オクターブ下の音が同じくらいの強さで入っている）
+  //   - 上の声は第2倍音を中心に、第3倍音から上をなだらかに弱める（急な山を作らない）。3kHz から上はフィルターで抑える
+  //   - 音量は 1 回目より約 4dB 小さい。立ち上がりも少しだけ柔らかく（4ms → 8ms）、コーラスは控えめ
+  //   帯域ごとの音量（全体に対する dB：100-200/200-400/400-800/800-1.6k/1.6k-3.2k/3.2k-6.4kHz）
+  //     利用者の音源 −14 / −6 / −12 / −6 / −5 / −9　→　このシンセ −17 / −7 / −8 / −4 / −7 / −13（1 回目は −37 / −17 / −7 / −2 / −10 / −23）
+  //   録音そのものは使っていない（音色を測っただけ）
   shin_keys: {
     label: "新宝島の鍵盤",
-    volume: -6,
+    volume: -12,
     synth: {
-      partials: [0.479, 1.0, 0.243, 0.309, 0.017, 0.068, 0.031, 0.027, 0.012, 0.006, 0.005, 0.004, 0.002, 0.003, 0.002, 0.001],
-      envelope: { attack: 0.004, decay: 0.12, sustain: 0.4, release: 0.15 },
+      partials: [0.3, 1, 0.6, 0.5, 0.35, 0.25, 0.18, 0.13, 0.09, 0.06, 0.045, 0.03],
+      envelope: { attack: 0.008, decay: 0.18, sustain: 0.45, release: 0.25 },
       filter: { type: "lowpass", Q: 1, rolloff: -12 },
-      filterEnvelope: { attack: 0.003, decay: 0.2, sustain: 0.75, release: 0.15, baseFrequency: 2600, octaves: 1.4 },
-      detune: 7,
-      pan: 0.8,
-      chorus: { frequency: 1.2, delayTime: 3.5, depth: 0.8, spread: 180, wet: 0.6 }
+      filterEnvelope: { attack: 0.005, decay: 0.25, sustain: 0.6, release: 0.2, baseFrequency: 3000, octaves: 1.0 },
+      detune: 5,
+      pan: 0.6,
+      chorus: { frequency: 0.8, delayTime: 4, depth: 0.5, spread: 180, wet: 0.35 },
+      // 1 オクターブ下の声：倍音が 1/k^0.9 でなだらかに減る波形（のこぎり波より少し柔らかい）
+      sub: {
+        gain: -2,
+        voice: { oscillator: { type: "custom", partials: [1, 0.536, 0.372, 0.287, 0.235, 0.199, 0.174, 0.154, 0.138, 0.126, 0.116, 0.107, 0.099, 0.093, 0.087, 0.082, 0.078, 0.074, 0.071, 0.067] } }
+      }
     }
   }
 };
@@ -83,7 +91,8 @@ const samplers = {}; // name → { sampler, loaded, promise }
 
 /**
  * シンセサイザーの楽器を作る
- * def.synth：{ partials, envelope, filter, filterEnvelope, detune, pan, chorus, volume }
+ * def.synth：{ partials, envelope, filter, filterEnvelope, detune, pan, chorus, sub }
+ *  - sub：{ gain, voice }　1 オクターブ下の声（gain は上の声との音量差 dB、voice で波形などを上書き）
  *  - partials：倍音ごとの強さ（第1倍音=1）。この割合の波形を2つ、少しずらして重ねる（detune セント）
  *  - filter / filterEnvelope：ローパスフィルターと、その開き具合の時間変化（音の明るさの変化）
  */
@@ -118,9 +127,19 @@ export function createSynth(def) {
     }
     return ps;
   });
+  // 1 オクターブ下の声（sub）：低い音を足して、細くて鋭い音を太く柔らかくする
+  let sub = null;
+  if (sy.sub) {
+    sub = new Tone.PolySynth(Tone.MonoSynth, { ...voice, ...(sy.sub.voice || {}) });
+    sub.maxPolyphony = 8;
+    sub.volume.value = (def.volume ?? 0) - 3 + (sy.sub.gain ?? -6);
+    sub.connect(out);
+  }
+  const down = (n) => Tone.Frequency(n).transpose(-12).toNote();
   return {
     triggerAttackRelease(notes, dur, time, velocity) {
       layers.forEach((l) => l.triggerAttackRelease(notes, dur, time, velocity));
+      if (sub) sub.triggerAttackRelease(Array.isArray(notes) ? notes.map(down) : down(notes), dur, time, velocity);
     }
   };
 }

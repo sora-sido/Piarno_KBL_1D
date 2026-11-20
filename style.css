@@ -1293,6 +1293,47 @@ body.is-recording .settings-rec-dot {
 .sp-toggle[aria-pressed="true"] .sp-switch::after {
   transform: translateX(16px);
 }
+/* 2 つから選ぶボタン（新宝島の音） */
+.sp-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.sp-choice-label {
+  font-size: 14px;
+  color: #e8ecf2;
+}
+.sp-seg {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.sp-seg button {
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #c3cad6;
+  cursor: pointer;
+}
+.sp-seg button[aria-checked="true"] {
+  background: #56b4e9;
+  color: #0b1220;
+  font-weight: 700;
+}
+.sp-seg button:focus-visible {
+  outline: 2px solid #56b4e9;
+  outline-offset: 2px;
+}
 @media (prefers-reduced-motion: reduce) {
   .sp-switch, .sp-switch::after { transition: none; }
 }
