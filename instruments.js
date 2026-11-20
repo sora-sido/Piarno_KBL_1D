@@ -5,6 +5,8 @@
  * 録音されていない高さの音は、近い音を少しずらして鳴らす（Tone.Sampler の機能）。
  * 曲を選んだときに、その曲で使う楽器だけを読み込む。
  *
+ * synth を持つ楽器は、録音を使わずにシンセサイザーで音を作る（ファイルの読み込み不要）。
+ *
  * 音源の出典（くわしくは public/samples/CREDITS.md）
  *  - violin / cello / trumpet / tuba：tonejs-instruments（Nicholaus Brosowsky, MIT）。録音は VSCO 2 Community Edition など
  *  - music_box / harpsichord：FluidR3_GM（Frank Wen）を midi-js-soundfonts（Benjamin Gleitzman）で mp3 にしたもの（CC BY 3.0）
@@ -59,11 +61,55 @@ export const INSTRUMENTS = {
 
 const samplers = {}; // name → { sampler, loaded, promise }
 
+/**
+ * シンセサイザーの楽器を作る
+ * def.synth：{ partials, envelope, filter, filterEnvelope, detune, chorus, volume }
+ *  - partials：倍音ごとの強さ（第1倍音=1）。この割合の波形を2つ、少しずらして重ねる（detune セント）
+ *  - filter / filterEnvelope：ローパスフィルターと、その開き具合の時間変化（音の明るさの変化）
+ */
+function createSynth(def) {
+  const sy = def.synth;
+  const voice = {
+    oscillator: { type: "custom", partials: sy.partials },
+    envelope: sy.envelope,
+    filter: sy.filter,
+    filterEnvelope: sy.filterEnvelope
+  };
+  const out = new Tone.Gain(1);
+  let node = out;
+  if (sy.chorus) {
+    const chorus = new Tone.Chorus(sy.chorus).start();
+    out.connect(chorus);
+    node = chorus;
+  }
+  node.toDestination();
+  // デチューンした2つの声を重ねて、厚みと左右の広がりを出す
+  const layers = [-1, 1].map((sign) => {
+    const ps = new Tone.PolySynth(Tone.MonoSynth, { ...voice, detune: sign * (sy.detune || 0) });
+    ps.maxPolyphony = 8;
+    ps.volume.value = (def.volume ?? 0) - 3;
+    ps.connect(out);
+    return ps;
+  });
+  return {
+    triggerAttackRelease(notes, dur, time, velocity) {
+      layers.forEach((l) => l.triggerAttackRelease(notes, dur, time, velocity));
+    }
+  };
+}
+
 /** 楽器を読み込む（同じ楽器は 1 回だけ）。読み込み済みなら何もしない */
 export function loadInstrument(name) {
   const def = INSTRUMENTS[name];
   if (!def) return Promise.resolve(false);
   if (samplers[name]) return samplers[name].promise;
+  if (def.synth) {
+    // シンセは読み込むファイルが無いので、すぐ使える
+    const entry = { sampler: createSynth(def), loaded: true, promise: Promise.resolve(true) };
+    samplers[name] = entry;
+    console.log(`[AUDIO] ${def.label}（シンセ）を用意しました`);
+    return entry.promise;
+  }
   const entry = { sampler: null, loaded: false, promise: null };
   entry.promise = new Promise((resolve) => {
     try {
