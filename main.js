@@ -852,6 +852,8 @@ export const SONGS = {
     sequence: def.sequence,
     firstMeasure: Math.max(1, def.score.measures[0]),
     instruments: def.instruments,
+    // 伴奏つきの5曲は短い音（16分音符など）が多く、ノーツが縦に詰まってリズムが読めないため、間隔を2倍に広げる
+    noteSpacing: 2,
     bpm: def.bpm,
     meter: def.score.meter
   }])),
@@ -1654,7 +1656,9 @@ function drawRhythmHighway(now) {
   const { hitY, topY, laneW, left, width } = playLayout;
   const seq = currentSequence;
   if (!seq || !seq.length || hitY <= topY) return;
-  const ppe = Math.max(14, Math.min(46, (hitY - topY) / 18)); // 8分音符1つぶんの高さ(px)
+  // 8分音符1つぶんの高さ(px)。16分音符が多い曲などは、曲ごとの倍率（noteSpacing）で縦に広げる
+  const spacing = (SONGS[currentSongId] && SONGS[currentSongId].noteSpacing) || 1;
+  const ppe = Math.max(14, Math.min(46, (hitY - topY) / 18)) * spacing;
 
   const lead = seq[Math.min(currentSongStep, seq.length - 1)];
   const target = typeof lead.onset === "number" ? lead.onset : 0;
@@ -1717,7 +1721,7 @@ function drawRhythmHighway(now) {
       if (seq[j].fingerKey === n.fingerKey) { nextSameLane = seq[j].onset - n.onset; break; }
     }
     const room = nextSameLane * ppe - 6;
-    const h = Math.max(16, Math.min(Math.max(34, n.dur * ppe - 4), room));
+    const h = Math.max(8, Math.min(Math.max(34, n.dur * ppe - 4), room));
     let alpha = 1;
     if (played) {
       // 弾いた音は判定ラインの下の帯を薄く流れていき、帯の下端に近づくにつれて消える
