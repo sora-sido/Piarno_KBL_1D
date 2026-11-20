@@ -1437,3 +1437,48 @@ body.positioning .song-progress-bar {
 .datalog-hud .lh-close[hidden] {
   display: none;
 }
+
+/* ==========================================================================
+   起動画面：画面の高さが足りなくても（スマホの横向きなど）スタートボタンが必ず見えるように
+   曲の一覧だけをスクロールさせ、ボタンは常にカードの下に表示する
+   ========================================================================== */
+.start-card {
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+.start-song-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+.start-play-btn {
+  flex: none;
+}
+/* 横向き・高さの低い画面：曲を2〜3列に並べ、注意書きは隠して高さを節約 */
+@media (max-height: 520px) {
+  .start-modal {
+    padding: 8px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px));
+  }
+  .start-card {
+    max-width: min(640px, 100%);
+    padding: 12px 14px;
+  }
+  .start-title {
+    margin-bottom: 8px;
+  }
+  .start-song-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .start-song-item {
+    padding: 8px 10px;
+  }
+  .start-hint {
+    display: none;
+  }
+}

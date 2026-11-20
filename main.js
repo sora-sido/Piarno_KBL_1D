@@ -2591,9 +2591,11 @@ async function handleStartPlay() {
 
   try {
     updateStatus("モデル読込待機中...");
+    // 先読みが終わるのを待つ。先読みが失敗していた（handLandmarker が無い）ときは、ここでもう一度読み込む
     if (handLandmarkerPromise) {
       await handLandmarkerPromise;
-    } else {
+    }
+    if (!handLandmarker) {
       await initHandLandmarker();
     }
 
@@ -2646,6 +2648,17 @@ async function handleStartPlay() {
       return;
     }
 
+    // 手の認識モデルの読み込み失敗は、カメラの問題ではないので分けて知らせる
+    if (error.name === "ModelLoadError") {
+      showCameraErrorOverlay(
+        "手の認識AIを読み込めませんでした。通信状態を確かめて、もう一度スタートを押してください（広告ブロッカーなどが読み込みを止めている場合もあります）。",
+        "手の認識AIを読み込めません"
+      );
+      showError(error.message);
+      updateStatus("エラー停止");
+      return;
+    }
+
     const guidanceMsg = getCameraErrorMessage(error);
     showCameraErrorOverlay(guidanceMsg);
     showError(error.message || guidanceMsg);
@@ -2656,10 +2669,33 @@ async function handleStartPlay() {
 /**
  * MediaPipe Hand Landmarker の初期化
  */
+// 手の認識の実行ファイル（WASM）の置き場所。アプリと一緒に配信している（vite.config.js で
+// node_modules/@mediapipe/tasks-vision/wasm を /mediapipe-wasm に置く）ものを優先し、だめなら CDN。
+// CDN のバージョンは package-lock.json の @mediapipe/tasks-vision と同じにする（JS と WASM の版を揃える）
+const MEDIAPIPE_WASM_PATHS = [
+  "./mediapipe-wasm",
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm"
+];
+
 async function initHandLandmarker() {
-  const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-  );
+  let vision = null;
+  for (const base of MEDIAPIPE_WASM_PATHS) {
+    try {
+      // 置き場所にファイルがあるかを先に確かめる（無い場所を指定すると、後のモデル作成で分かりにくいエラーになるため）
+      const probe = await fetch(`${base}/vision_wasm_internal.js`, { method: "HEAD" });
+      if (!probe.ok) throw new Error(`HTTP ${probe.status}`);
+      vision = await FilesetResolver.forVisionTasks(base);
+      console.log(`[MODEL] 手の認識の実行ファイル: ${base}`);
+      break;
+    } catch (err) {
+      console.warn(`[MODEL] 実行ファイルを読めません（${base}）:`, err);
+    }
+  }
+  if (!vision) {
+    const e = new Error("手の認識の実行ファイルを読み込めませんでした");
+    e.name = "ModelLoadError";
+    throw e;
+  }
 
   const modelPaths = [
     "./models/hand_landmarker.task",
@@ -2710,7 +2746,9 @@ async function initHandLandmarker() {
   }
 
   if (!loaded) {
-    throw new Error(`モデルロード失敗: ${lastErr?.message || "不明なエラー"}`);
+    const e = new Error(`モデルロード失敗: ${lastErr?.message || "不明なエラー"}`);
+    e.name = "ModelLoadError";
+    throw e;
   }
 }
 
@@ -2771,6 +2809,13 @@ document.documentElement.style.setProperty("--video-aspect", initialAspect.toFix
  */
 async function startFrontCamera() {
   let stream = null;
+
+  // 前回の起動で開いたカメラが残っていたら閉じる（開いたままだと Android などで「使用中」になり失敗する）
+  if (currentStream) {
+    try { currentStream.getTracks().forEach((t) => t.stop()); } catch { /* 閉じられなくても続ける */ }
+    currentStream = null;
+    video.srcObject = null;
+  }
 
   const isTablet = isTabletOrSquareScreen();
   console.log(`[CAM] 端末判定: ${isTablet ? "iPad/タブレット (4:3ネイティブ優先)" : "PC/スマートフォン (16:9優先)"}`);
@@ -2947,6 +2992,20 @@ async function startFrontCamera() {
   }
 
   currentStream = stream;
+  // 映像の準備ができた合図（loadedmetadata）は、この直後〜下の設定処理の間に来ることがある。
+  // 合図を待ち始めるのが遅れると、すでに来た合図を待ち続けて起動が止まる（実機で「カメラ・AI起動中...」のまま止まる原因）。
+  // そのため、映像をつなぐ前に待ち始め、すでに準備できていればすぐ進む
+  const metadataReady = new Promise((resolve, reject) => {
+    const done = () => { clearTimeout(timer); resolve(); };
+    const timer = setTimeout(() => {
+      const e = new Error("カメラの映像が届きませんでした");
+      e.name = "CameraTimeoutError";
+      reject(e);
+    }, 10000);
+    if (video.readyState >= 1) { done(); return; }
+    video.addEventListener("loadedmetadata", done, { once: true });
+    video.addEventListener("error", (err) => { clearTimeout(timer); reject(err); }, { once: true });
+  });
   video.srcObject = currentStream;
 
   // ハードウェアがサポートする最大フレームレートの適用を試みる（iOS Safariなど非対応環境では安全にスキップ）
@@ -2992,30 +3051,23 @@ async function startFrontCamera() {
     }
   }
 
-  await new Promise((resolve, reject) => {
-    video.onloadedmetadata = async () => {
-      try {
-        await video.play();
-        resolve();
-      } catch (playErr) {
-        console.warn("[CAM] video.play() 自動再生エラー:", playErr);
-        // 自動再生ポリシー制限（NotAllowedError や User interaction 必須）の場合はタップ起動フォールバックを要求
-        const isAutoplayBlocked =
-          playErr.name === "NotAllowedError" ||
-          playErr.name === "AbortError" ||
-          (playErr.message && playErr.message.toLowerCase().includes("interact"));
-
-        if (isAutoplayBlocked) {
-          const autoErr = new Error("画面をタップしてカメラを開始してください");
-          autoErr.name = "AutoplayBlockedError";
-          reject(autoErr);
-          return;
-        }
-        reject(playErr);
-      }
-    };
-    video.onerror = (err) => reject(err);
-  });
+  await metadataReady;
+  try {
+    await video.play();
+  } catch (playErr) {
+    console.warn("[CAM] video.play() 自動再生エラー:", playErr);
+    // 自動再生ポリシー制限（NotAllowedError や User interaction 必須）の場合はタップ起動フォールバックを要求
+    const isAutoplayBlocked =
+      playErr.name === "NotAllowedError" ||
+      playErr.name === "AbortError" ||
+      (playErr.message && playErr.message.toLowerCase().includes("interact"));
+    if (isAutoplayBlocked) {
+      const autoErr = new Error("画面をタップしてカメラを開始してください");
+      autoErr.name = "AutoplayBlockedError";
+      throw autoErr;
+    }
+    throw playErr;
+  }
 
   // Canvas内部解像度をビデオ解像度に完全一致させる
   updateCanvasResolution();
@@ -3066,6 +3118,9 @@ function processVideoFrame(frameTime, metadata = null) {
   lastVideoTimestamp = timestampMs;
 
   const startTime = performance.now();
+
+  // 手の認識モデルがまだ無い（読み込み失敗など）ときは、このコマを飛ばす（例外で推論ループが止まらないように）
+  if (!handLandmarker) return;
 
   // VIDEOモードでの同期推論（正確なタイムスタンプにより内部トラッキング予測器が安定化）
   const results = handLandmarker.detectForVideo(video, timestampMs);
@@ -3829,8 +3884,11 @@ function updateStatus(msg) {
  * @returns {string}
  */
 function getCameraErrorMessage(error) {
-  if (!window.isSecureContext || !navigator.mediaDevices) {
+  if (!window.isSecureContext) {
     return "カメラはHTTPS環境でのみ動作します。https:// または localhost でアクセスしてください。";
+  }
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+    return "このブラウザではカメラを使えません。LINE・Instagram などのアプリ内で開いている場合は、Safari または Chrome で開き直してください。";
   }
 
   const errName = error?.name || "";
@@ -3854,14 +3912,16 @@ function getCameraErrorMessage(error) {
     return "カメラを起動できませんでした。他のアプリ（通話・カメラ等）が使用中の可能性があります。他アプリを終了して再読み込みしてください。";
   }
 
-  if (
-    errName === "OverconstrainedError" ||
-    errName === "ConstraintNotSatisfiedError"
-  ) {
-    return "カメラの初期化に失敗しました。標準設定で再試行します。";
+  if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
+    return "カメラが見つかりませんでした。カメラのある端末で開いてください。";
   }
 
-  return "カメラの初期化に失敗しました。標準設定で再試行します。";
+  if (errName === "CameraTimeoutError") {
+    return "カメラの映像が届きませんでした。ページを再読み込みして、もう一度スタートを押してください。";
+  }
+
+  // そのほか：原因を調べられるよう、エラーの種類を添える
+  return `カメラを起動できませんでした（${errName || "不明なエラー"}）。ページを再読み込みして、もう一度スタートを押してください。`;
 }
 
 /**
