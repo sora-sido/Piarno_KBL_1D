@@ -844,7 +844,10 @@ export const SONGS = {
     id: "shin_takarajima",
     title: "新宝島",
     sequence: SHIN_TAKARAJIMA_SEQUENCE,
-    firstMeasure: SHIN_TAKARAJIMA_SCORE.measures[0]
+    firstMeasure: SHIN_TAKARAJIMA_SCORE.measures[0],
+    // 原曲の鍵盤の音色に合わせたシンセで鳴らす（instruments.js の shin_keys）。伴奏は無し
+    instruments: { melody: ["shin_keys"] },
+    bpm: 156
   },
   ...Object.fromEntries(SCORE_SONGS.map((def) => [def.id, {
     id: def.id,

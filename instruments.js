@@ -56,6 +56,26 @@ export const INSTRUMENTS = {
     label: "チェンバロ",
     files: FLUID_SET,
     release: 1.2, volume: -12
+  },
+  // 新宝島の鍵盤（シンセ）の音色。原曲の録音から鍵盤のパートを音源分離（Demucs htdemucs_6s の「other」）で取り出し、
+  // Aメロのリフ（28〜60 秒・59 音）を測った値に合わせて作ったもの。録音そのものは使っていない
+  //  - 倍音：第2倍音が第1倍音より +6dB 強く、第3・4倍音は −4〜−6dB、第5倍音から上は −17〜−51dB と急に弱い
+  //  - 音量の形：叩いた瞬間に最大（10ms 以内）→ 100ms 後に約 −8dB → 8 分音符ほどで減衰
+  //  - 明るさ：鳴り始めが少し明るく、伸ばすうちに暗くなる（スペクトル重心 / 基本周波数 4.05 → 3.34）
+  //  - 左右の広がりが大きい（左右の相関 0.12）→ 2 つの声を少しずらして左右に振り、コーラスで広げる
+  //  同じリフをこのシンセで鳴らして同じ方法で測ると、第2〜10倍音の強さの差は平均 1.2dB、左右の相関 0.07
+  shin_keys: {
+    label: "新宝島の鍵盤",
+    volume: -6,
+    synth: {
+      partials: [0.479, 1.0, 0.243, 0.309, 0.017, 0.068, 0.031, 0.027, 0.012, 0.006, 0.005, 0.004, 0.002, 0.003, 0.002, 0.001],
+      envelope: { attack: 0.004, decay: 0.12, sustain: 0.4, release: 0.15 },
+      filter: { type: "lowpass", Q: 1, rolloff: -12 },
+      filterEnvelope: { attack: 0.003, decay: 0.2, sustain: 0.75, release: 0.15, baseFrequency: 2600, octaves: 1.4 },
+      detune: 7,
+      pan: 0.8,
+      chorus: { frequency: 1.2, delayTime: 3.5, depth: 0.8, spread: 180, wet: 0.6 }
+    }
   }
 };
 
@@ -63,11 +83,11 @@ const samplers = {}; // name → { sampler, loaded, promise }
 
 /**
  * シンセサイザーの楽器を作る
- * def.synth：{ partials, envelope, filter, filterEnvelope, detune, chorus, volume }
+ * def.synth：{ partials, envelope, filter, filterEnvelope, detune, pan, chorus, volume }
  *  - partials：倍音ごとの強さ（第1倍音=1）。この割合の波形を2つ、少しずらして重ねる（detune セント）
  *  - filter / filterEnvelope：ローパスフィルターと、その開き具合の時間変化（音の明るさの変化）
  */
-function createSynth(def) {
+export function createSynth(def) {
   const sy = def.synth;
   const voice = {
     oscillator: { type: "custom", partials: sy.partials },
@@ -88,7 +108,14 @@ function createSynth(def) {
     const ps = new Tone.PolySynth(Tone.MonoSynth, { ...voice, detune: sign * (sy.detune || 0) });
     ps.maxPolyphony = 8;
     ps.volume.value = (def.volume ?? 0) - 3;
-    ps.connect(out);
+    if (sy.pan) {
+      // 2 つの声を左右に振る（左右の広がり）
+      const panner = new Tone.Panner(sign * sy.pan);
+      ps.connect(panner);
+      panner.connect(out);
+    } else {
+      ps.connect(out);
+    }
     return ps;
   });
   return {
