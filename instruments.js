@@ -138,15 +138,16 @@ function makeOutput(def, input) {
  *  - filter / filterEnvelope：ローパスフィルターと、その開き具合の時間変化（音の明るさの変化）
  */
 export function createSynth(def) {
+  const fx = makeSynthEffects(def);
+  const voices = createSynthVoices(def, fx.input);
+  return { ready: fx.ready, triggerAttackRelease: voices.triggerAttackRelease };
+}
+
+/** シンセの後ろにかける効果（コーラス・フェイザー・響き）。input につないだ音が効果を通ってスピーカーへ */
+function makeSynthEffects(def) {
   const sy = def.synth;
-  const voice = {
-    oscillator: { type: "custom", partials: sy.partials },
-    envelope: sy.envelope,
-    filter: sy.filter,
-    filterEnvelope: sy.filterEnvelope
-  };
-  const out = new Tone.Gain(1);
-  let node = out;
+  const input = new Tone.Gain(1);
+  let node = input;
   if (sy.chorus) {
     const chorus = new Tone.Chorus(sy.chorus).start();
     node.connect(chorus);
@@ -158,7 +159,18 @@ export function createSynth(def) {
     node.connect(phaser);
     node = phaser;
   }
-  const ready = makeOutput(def, node);
+  return { input, ready: makeOutput(def, node) };
+}
+
+/** シンセの声（効果をかける前の音）を作り、dest につなぐ */
+function createSynthVoices(def, dest) {
+  const sy = def.synth;
+  const voice = {
+    oscillator: { type: "custom", partials: sy.partials },
+    envelope: sy.envelope,
+    filter: sy.filter,
+    filterEnvelope: sy.filterEnvelope
+  };
   // デチューンした2つの声を重ねて、厚みと左右の広がりを出す
   const layers = [-1, 1].map((sign) => {
     const ps = new Tone.PolySynth(Tone.MonoSynth, { ...voice, detune: sign * (sy.detune || 0) });
@@ -168,9 +180,9 @@ export function createSynth(def) {
       // 2 つの声を左右に振る（左右の広がり）
       const panner = new Tone.Panner(sign * sy.pan);
       ps.connect(panner);
-      panner.connect(out);
+      panner.connect(dest);
     } else {
-      ps.connect(out);
+      ps.connect(dest);
     }
     return ps;
   });
@@ -180,16 +192,42 @@ export function createSynth(def) {
     sub = new Tone.PolySynth(Tone.MonoSynth, { ...voice, ...(sy.sub.voice || {}) });
     sub.maxPolyphony = 8;
     sub.volume.value = (def.volume ?? 0) - 3 + (sy.sub.gain ?? -6);
-    sub.connect(out);
+    sub.connect(dest);
   }
   const down = (n) => Tone.Frequency(n).transpose(-12).toNote();
   return {
-    ready,
     triggerAttackRelease(notes, dur, time, velocity) {
       layers.forEach((l) => l.triggerAttackRelease(notes, dur, time, velocity));
       if (sub) sub.triggerAttackRelease(Array.isArray(notes) ? notes.map(down) : down(notes), dur, time, velocity);
     }
   };
+}
+
+// 前もって録音しておく高さ（3 半音ごと。間の高さは Tone.Sampler が近い音を少しずらして鳴らす）
+const PRERENDER_NOTES = ["A3", "C4", "Eb4", "Gb4", "A4", "C5", "Eb5", "Gb5", "A5", "C6"];
+
+/**
+ * シンセの音を前もって 1 音ずつ書き出し（オフラインで録音し）、演奏中は録音を鳴らす楽器を作る
+ * シンセを打鍵のたびに鳴らすと、1 音に 3 つの声（左右の 2 つと 1 オクターブ下）を作り、それぞれ約 4 秒鳴り続けるため、
+ * 速いリフでは同時に 20 以上の声が要り、1 打鍵の処理が 100ms 近くかかって画面が止まった（2026-11-21 の計測）。
+ * 録音を鳴らす方式なら、電子ピアノと同じ軽さで、同じ音色になる
+ */
+async function createPrerenderedSynth(def) {
+  const sy = def.synth;
+  const env = sy.envelope || {};
+  const hold = Math.min(4, (env.attack || 0) + (env.decay || 1) + 0.05); // 鳴り終わるまで
+  const urls = {};
+  for (const note of PRERENDER_NOTES) {
+    urls[note] = await Tone.Offline(() => {
+      const v = createSynthVoices(def, Tone.getDestination());
+      v.triggerAttackRelease(note, hold, 0, 1);
+    }, hold + 0.05, 2, Tone.getContext().sampleRate);
+  }
+  const fx = makeSynthEffects(def);
+  const sampler = new Tone.Sampler({ urls, release: env.release ?? 0.5, attack: 0 });
+  sampler.connect(fx.input);
+  await Promise.all([fx.ready, Tone.loaded()]);
+  return sampler;
 }
 
 /** 楽器を読み込む（同じ楽器は 1 回だけ）。読み込み済みなら何もしない */
@@ -199,11 +237,12 @@ export function loadInstrument(name) {
   if (samplers[name]) return samplers[name].promise;
   if (def.synth) {
     // シンセは読み込むファイルが無いので、すぐ使える
-    const entry = { sampler: createSynth(def), loaded: false, promise: null };
-    // 響き（リバーブ）の準備は一瞬で終わる。終わるまではピアノで代わりに鳴らす
-    entry.promise = entry.sampler.ready.then(() => {
+    const entry = { sampler: null, loaded: false, promise: null };
+    // 音の書き出しと響き（リバーブ）の準備が終わるまで（1 秒ほど）は、ピアノで代わりに鳴らす
+    entry.promise = createPrerenderedSynth(def).then((sampler) => {
+      entry.sampler = sampler;
       entry.loaded = true;
-      console.log(`[AUDIO] ${def.label}（シンセ）を用意しました`);
+      console.log(`[AUDIO] ${def.label}（シンセ）を用意しました（${PRERENDER_NOTES.length} 音を書き出し）`);
       return true;
     }).catch((e) => {
       console.warn(`[AUDIO] ${def.label} を用意できません（ピアノで代用します）`, e);
