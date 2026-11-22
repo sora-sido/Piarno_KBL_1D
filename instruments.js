@@ -162,9 +162,13 @@ function makeSynthEffects(def) {
   return { input, ready: makeOutput(def, node) };
 }
 
-/** シンセの声（効果をかける前の音）を作り、dest につなぐ */
-function createSynthVoices(def, dest) {
+/**
+ * シンセの声（効果をかける前の音）を作り、dest につなぐ
+ * context を渡すと、その音の場（書き出し用の OfflineContext など）で作る。省くといつもの音の場
+ */
+function createSynthVoices(def, dest, context) {
   const sy = def.synth;
+  const ctxOpt = context ? { context } : {};
   const voice = {
     oscillator: { type: "custom", partials: sy.partials },
     envelope: sy.envelope,
@@ -173,12 +177,13 @@ function createSynthVoices(def, dest) {
   };
   // デチューンした2つの声を重ねて、厚みと左右の広がりを出す
   const layers = [-1, 1].map((sign) => {
-    const ps = new Tone.PolySynth(Tone.MonoSynth, { ...voice, detune: sign * (sy.detune || 0) });
+    // PolySynth の音の場（context）は、声の設定（options）ではなく PolySynth 自身に渡す
+    const ps = new Tone.PolySynth({ ...ctxOpt, voice: Tone.MonoSynth, options: { ...voice, detune: sign * (sy.detune || 0) } });
     ps.maxPolyphony = 8;
     ps.volume.value = (def.volume ?? 0) - 3;
     if (sy.pan) {
       // 2 つの声を左右に振る（左右の広がり）
-      const panner = new Tone.Panner(sign * sy.pan);
+      const panner = new Tone.Panner({ ...ctxOpt, pan: sign * sy.pan });
       ps.connect(panner);
       panner.connect(dest);
     } else {
@@ -189,7 +194,7 @@ function createSynthVoices(def, dest) {
   // 1 オクターブ下の声（sub）：低い音を足して、細くて鋭い音を太く柔らかくする
   let sub = null;
   if (sy.sub) {
-    sub = new Tone.PolySynth(Tone.MonoSynth, { ...voice, ...(sy.sub.voice || {}) });
+    sub = new Tone.PolySynth({ ...ctxOpt, voice: Tone.MonoSynth, options: { ...voice, ...(sy.sub.voice || {}) } });
     sub.maxPolyphony = 8;
     sub.volume.value = (def.volume ?? 0) - 3 + (sy.sub.gain ?? -6);
     sub.connect(dest);
@@ -212,16 +217,19 @@ const PRERENDER_NOTES = ["A3", "C4", "Eb4", "Gb4", "A4", "C5", "Eb5", "Gb5", "A5
  * 速いリフでは同時に 20 以上の声が要り、1 打鍵の処理が 100ms 近くかかって画面が止まった（2026-11-21 の計測）。
  * 録音を鳴らす方式なら、電子ピアノと同じ軽さで、同じ音色になる
  */
-async function createPrerenderedSynth(def) {
+export async function createPrerenderedSynth(def) {
   const sy = def.synth;
   const env = sy.envelope || {};
   const hold = Math.min(4, (env.attack || 0) + (env.decay || 1) + 0.05); // 鳴り終わるまで
   const urls = {};
   for (const note of PRERENDER_NOTES) {
-    urls[note] = await Tone.Offline(() => {
-      const v = createSynthVoices(def, Tone.getDestination());
-      v.triggerAttackRelease(note, hold, 0, 1);
-    }, hold + 0.05, 2, Tone.getContext().sampleRate);
+    // Tone.Offline は書き出しの間 Tone.js 全体の音の場を切り替えてしまい、その間に打鍵するとエラーになる。
+    // そのため、書き出し専用の音の場を作って、そこにだけ声を作る
+    const off = new Tone.OfflineContext(2, hold + 0.05, Tone.getContext().sampleRate);
+    const v = createSynthVoices(def, off.destination, off);
+    v.triggerAttackRelease(note, hold, 0, 1);
+    urls[note] = await off.render();
+    off.dispose();
   }
   const fx = makeSynthEffects(def);
   const sampler = new Tone.Sampler({ urls, release: env.release ?? 0.5, attack: 0 });

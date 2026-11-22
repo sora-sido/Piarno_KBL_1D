@@ -7,6 +7,10 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <title>Hand Tracking</title>
+    <!-- ロゴ用書体 Lobster（読み込めない場合は筆記体系のフォールバック） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lobster&display=swap" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -77,6 +81,7 @@
             <button class="song-menu-item sp-row" type="button" data-song="the_entertainer">エンターテイナー</button>
             <button class="song-menu-item sp-row" type="button" data-song="canon">カノン</button>
             <button class="song-menu-item sp-row" type="button" data-song="saints">聖者の行進</button>
+            <button class="song-menu-item sp-row" type="button" data-song="saints_piano">聖者の行進（ピアノ伴奏）</button>
             <button class="song-menu-item sp-row" type="button" data-song="happy_birthday">ハッピーバースデー</button>
             <button class="song-menu-item sp-row" type="button" data-song="fur_elise">エリーゼのために</button>
             <button class="song-menu-item sp-row" type="button" data-song="free">フリー演奏（ドレミファソ）</button>
@@ -143,36 +148,59 @@
           </div>
         </div>
       </div>
-      <!-- 起動時：楽曲選択＆スタートモーダル（シンプル・白黒ミニマル） -->
-      <div id="start-modal" class="start-modal">
+      <!-- 起動スプラッシュ：背景写真の上にロゴが現れる -->
+      <div id="splash" class="splash" aria-hidden="true">
+        <div class="splash-bg"></div>
+        <div class="splash-stage">
+          <div class="splash-logo">
+            <span>P</span><span>i</span><span class="logo-accent">a</span><span class="logo-accent">r</span><span>n</span><span>o</span>
+          </div>
+          <div class="splash-tagline">Piano✕AIで誰もがピアニストに</div>
+        </div>
+      </div>
+
+      <!-- 起動時：楽曲選択＆スタートモーダル（モーション付き・白黒ミニマル） -->
+      <div id="start-modal" class="start-modal is-waiting">
         <div class="start-card">
           <div class="start-title">曲を選択</div>
           <div class="start-song-list">
-            <button class="start-song-item selected" data-song="ode_to_joy">
+            <button class="start-song-item selected" data-song="ode_to_joy" style="--i: 0">
               <span class="start-song-name">よろこびのうた</span>
+              <span class="start-song-meta"><span class="start-song-count"></span><span class="start-song-level" aria-label="難易度2">●●○</span></span>
             </button>
-            <button class="start-song-item" data-song="mary_had_a_little_lamb">
+            <button class="start-song-item" data-song="mary_had_a_little_lamb" style="--i: 1">
               <span class="start-song-name">メリーさんの羊</span>
+              <span class="start-song-meta"><span class="start-song-count"></span><span class="start-song-level" aria-label="難易度1">●○○</span></span>
             </button>
-            <button class="start-song-item" data-song="shin_takarajima">
+            <button class="start-song-item" data-song="shin_takarajima" style="--i: 2">
               <span class="start-song-name">新宝島</span>
+              <span class="start-song-meta"><span class="start-song-count"></span><span class="start-song-level" aria-label="難易度3">●●●</span></span>
             </button>
-            <button class="start-song-item" data-song="the_entertainer">
+            <button class="start-song-item" data-song="the_entertainer" style="--i: 3">
               <span class="start-song-name">エンターテイナー</span>
+              <span class="start-song-meta"><span class="start-song-count"></span></span>
             </button>
-            <button class="start-song-item" data-song="canon">
+            <button class="start-song-item" data-song="canon" style="--i: 4">
               <span class="start-song-name">カノン</span>
+              <span class="start-song-meta"><span class="start-song-count"></span></span>
             </button>
-            <button class="start-song-item" data-song="saints">
+            <button class="start-song-item" data-song="saints" style="--i: 5">
               <span class="start-song-name">聖者の行進</span>
+              <span class="start-song-meta"><span class="start-song-count"></span></span>
             </button>
-            <button class="start-song-item" data-song="happy_birthday">
+            <button class="start-song-item" data-song="saints_piano" style="--i: 6">
+              <span class="start-song-name">聖者の行進（ピアノ伴奏）</span>
+              <span class="start-song-meta"><span class="start-song-count"></span><span class="start-song-level" aria-label="難易度3">●●●</span></span>
+            </button>
+            <button class="start-song-item" data-song="happy_birthday" style="--i: 7">
               <span class="start-song-name">ハッピーバースデー</span>
+              <span class="start-song-meta"><span class="start-song-count"></span></span>
             </button>
-            <button class="start-song-item" data-song="fur_elise">
+            <button class="start-song-item" data-song="fur_elise" style="--i: 8">
               <span class="start-song-name">エリーゼのために</span>
+              <span class="start-song-meta"><span class="start-song-count"></span></span>
             </button>
-            <button class="start-song-item" data-song="free">
+            <button class="start-song-item" data-song="free" style="--i: 9">
               <span class="start-song-name">フリー演奏（ドレミファソ）</span>
             </button>
           </div>

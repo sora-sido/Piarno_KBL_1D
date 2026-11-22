@@ -8,6 +8,14 @@
   padding: 0;
 }
 
+:root {
+  /* テーマカラー：白黒＋ピアノの鍵盤カバー（キーカバー）のような深いワインレッド */
+  --wine-deep: #4f0b18;
+  --wine: #8e1b30;
+  --wine-bright: #c83650;
+  --wine-glow: rgba(200, 54, 80, 0.45);
+}
+
 html, body {
   background-color: #000000;
   color: #ffffff;
@@ -37,6 +45,8 @@ html, body {
 
 /* ビデオコンテナ：カメラ映像のアスペクト比を維持したまま、画面領域（幅・高さ）の限界まで最大拡大 */
 .video-container {
+  --video-ar: 4 / 3;
+  --video-ar-num: 1.3333;
   position: relative;
   display: block;
   /* 画面（ビューポート）内に収まる最大サイズをアスペクト比に基づき自動計算 */
@@ -204,6 +214,39 @@ html, body {
   align-items: center;
   gap: 10px;
   pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* 右上の切り替えボタン（トラッキングライン ON/OFF） */
+.view-mode-btn {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 19px;
+  background-color: rgba(20, 20, 20, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.view-mode-btn:hover {
+  background-color: rgba(50, 50, 50, 0.95);
+}
+
+.view-mode-btn:active {
+  transform: scale(0.95);
+}
+
+.view-mode-btn.is-on {
+  border-color: var(--wine-bright);
+  box-shadow: 0 0 10px var(--wine-glow);
 }
 
 .song-select-container {
@@ -843,9 +886,147 @@ html, body {
 }
 
 /* ==========================================================================
-   起動時：楽曲選択＆スタートモーダル（シンプル・白黒ミニマル）
+   起動スプラッシュ：暗くした背景写真の上にロゴが現れる
+   ========================================================================== */
+.splash {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: absolute;
+  inset: 0;
+  z-index: 420;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(120% 90% at 50% 60%, #141414 0%, #000000 70%);
+  cursor: pointer;
+  transition: opacity 0.6s var(--ease-out), visibility 0.6s, transform 0.6s var(--ease-out);
+}
+
+/* 背景写真（public/images/splash-bg.jpg）。黒を重ねて暗くし、ゆっくりズームさせる。写真がなければ黒のグラデーションのみ */
+.splash-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.splash-bg::before {
+  content: "";
+  position: absolute;
+  inset: -4%;
+  background: url("./images/splash-bg.jpg") 58% 72% / cover no-repeat; /* 手元（打鍵している手）が中心に来る位置 */
+  filter: grayscale(0.35) contrast(1.05);
+  animation: bg-drift 14s ease-out both;
+}
+
+.splash-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(90% 70% at 50% 50%, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.82) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.75) 100%);
+}
+
+.splash-stage {
+  position: relative;
+}
+
+@keyframes bg-drift {
+  from { transform: scale(1.12); opacity: 0; }
+  12% { opacity: 1; }
+  to { transform: scale(1.0); opacity: 1; }
+}
+
+.splash.is-leaving {
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(1.06);
+  pointer-events: none;
+}
+
+.splash-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-inline: 16px;
+  text-align: center;
+}
+
+.splash-logo {
+  display: flex;
+  font-family: "Lobster", "Brush Script MT", "Segoe Script", cursive;
+  font-size: clamp(76px, 22vw, 132px);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0;
+  color: #ffffff;
+}
+
+/* ロゴの「ar」だけ、鍵盤カバーのような重厚なワインレッドに（ベルベットの光沢をグラデーションで表現） */
+.logo-accent {
+  color: var(--wine-bright);
+  background: linear-gradient(180deg, #d75a70 0%, var(--wine-bright) 30%, var(--wine) 65%, var(--wine-deep) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 12px var(--wine-glow));
+}
+
+.splash-logo span {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(18px);
+  filter: blur(6px);
+}
+
+.splash.is-logo .splash-logo span {
+  animation: letter-in 0.6s var(--ease-out) forwards;
+  animation-delay: calc(0.05s * var(--l, 0));
+}
+
+.splash-logo span:nth-child(1) { --l: 0; }
+.splash-logo span:nth-child(2) { --l: 1; }
+.splash-logo span:nth-child(3) { --l: 2; }
+.splash-logo span:nth-child(4) { --l: 3; }
+.splash-logo span:nth-child(5) { --l: 4; }
+.splash-logo span:nth-child(6) { --l: 5; }
+
+.splash-tagline {
+  font-size: clamp(12px, 3.4vw, 15px);
+  color: #9a9a9a;
+  letter-spacing: 0.18em;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.splash.is-logo .splash-tagline {
+  animation: fade-up 0.7s var(--ease-out) 0.35s forwards;
+}
+
+@keyframes letter-in {
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* 「ar」は登場後にワインレッドの光彩を残す */
+.splash.is-logo .splash-logo .logo-accent {
+  animation-name: letter-in-accent;
+}
+
+@keyframes letter-in-accent {
+  to { opacity: 1; transform: translateY(0); filter: drop-shadow(0 0 12px var(--wine-glow)); }
+}
+
+@keyframes fade-up {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   起動時：楽曲選択＆スタートモーダル（モーション付き・白黒ミニマル）
    ========================================================================== */
 .start-modal {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   position: absolute;
   inset: 0;
   width: 100%;
@@ -859,7 +1040,13 @@ html, body {
   z-index: 390;
   padding: 16px;
   opacity: 1;
-  transition: opacity 0.25s ease, visibility 0.25s ease;
+  transition: opacity 0.45s var(--ease-out), visibility 0.45s;
+}
+
+/* スプラッシュ表示中は待機（カードはまだ出さない） */
+.start-modal.is-waiting {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .start-modal.hidden {
@@ -871,24 +1058,38 @@ html, body {
 .start-card {
   background-color: #111111;
   border: 1px solid #333333;
-  border-radius: 8px;
-  max-width: 300px;
+  border-radius: 12px;
+  max-width: 320px;
   width: 100%;
-  padding: 22px 20px;
+  padding: 24px 20px 20px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  animation: card-in 0.6s var(--ease-out) both;
+  transition: transform 0.45s var(--ease-out), opacity 0.45s var(--ease-out), filter 0.45s;
+}
+
+.start-modal.is-waiting .start-card,
+.start-modal.is-waiting .start-song-item,
+.start-modal.is-waiting .start-play-btn,
+.start-modal.is-waiting .start-title {
+  animation-play-state: paused;
+}
+
+/* スタート押下後：カードが奥へ沈んで消える */
+.start-modal.hidden .start-card {
+  animation: card-out 0.4s var(--ease-out) forwards;
 }
 
 .start-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #888888;
-  letter-spacing: 1px;
-  margin-bottom: 14px;
-  text-transform: uppercase;
+  font-size: 15px;
+  font-weight: 700;
+  color: #dddddd;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+  animation: fade-up-in 0.5s var(--ease-out) 0.1s both;
 }
 
 .start-song-list {
@@ -900,40 +1101,101 @@ html, body {
 }
 
 .start-song-item {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 10px;
   background-color: #181818;
   border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  padding: 11px 14px;
+  border-radius: 8px;
+  padding: 12px 14px;
   color: #aaaaaa;
   font-size: 13.5px;
   cursor: pointer;
-  text-align: center;
-  transition: all 0.15s ease;
+  text-align: left;
   user-select: none;
   width: 100%;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.25s var(--ease-out);
+  animation: item-in 0.55s var(--ease-out) both;
+  animation-delay: calc(0.24s + 0.07s * var(--i, 0));
+}
+
+/* 選択中の曲：左端の光るバーが伸びる */
+.start-song-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--wine-bright);
+  box-shadow: 0 0 12px var(--wine-glow);
+  transform: scaleY(0);
+  transition: transform 0.35s var(--ease-out);
 }
 
 .start-song-item:hover {
   background-color: #222222;
   color: #ffffff;
   border-color: #444444;
+  transform: translateX(3px);
+}
+
+.start-song-item:active {
+  transform: scale(0.98);
 }
 
 .start-song-item.selected {
-  background-color: #262626;
-  border-color: #ffffff;
+  background-color: #241417;
+  border-color: var(--wine);
   color: #ffffff;
   font-weight: 600;
+}
+
+.start-song-item.selected::before {
+  transform: scaleY(1);
+}
+
+/* 登場アニメーション後は固定し、選んだ瞬間だけ小さくはずませる */
+.start-song-item.is-in {
+  animation: none;
+}
+
+.start-song-item.is-in.is-picked {
+  animation: item-pick 0.35s var(--ease-out);
 }
 
 .start-song-name {
   letter-spacing: 0.5px;
 }
 
+.start-song-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #666666;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.start-song-item.selected .start-song-meta {
+  color: #aaaaaa;
+}
+
+.start-song-level {
+  font-size: 7px;
+  letter-spacing: 2px;
+}
+
 .start-play-btn {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   display: inline-flex;
   align-items: center;
@@ -941,32 +1203,98 @@ html, body {
   background-color: #ffffff;
   color: #000000;
   border: 1px solid #ffffff;
-  border-radius: 6px;
-  padding: 12px 16px;
+  border-radius: 8px;
+  padding: 13px 16px;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 1.5px;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   user-select: none;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, transform 0.2s var(--ease-out), box-shadow 0.3s ease;
+  animation: item-in 0.55s var(--ease-out) 0.5s both, btn-glow 2.4s ease-in-out 1.2s infinite;
+}
+
+/* 光が横切るシマー */
+.start-play-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 30%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+  transform: skewX(-20deg);
+  animation: shimmer 2.4s ease-in-out 1.2s infinite;
+  pointer-events: none;
 }
 
 .start-play-btn:hover {
-  background-color: #e0e0e0;
-  border-color: #e0e0e0;
+  background-color: #e8e8e8;
+  border-color: #e8e8e8;
   transform: translateY(-1px);
 }
 
 .start-play-btn:active {
-  transform: translateY(0);
+  transform: scale(0.97);
   background-color: #cccccc;
 }
 
 .start-play-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  opacity: 0.75;
+  cursor: progress;
   transform: none;
+  animation: none;
+}
+
+.start-play-btn:disabled::after {
+  animation: shimmer 1s linear infinite;
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes card-out {
+  from { opacity: 1; transform: scale(1); filter: blur(0); }
+  to { opacity: 0; transform: scale(0.92) translateY(10px); filter: blur(4px); }
+}
+
+@keyframes fade-up-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes item-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes item-pick {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { left: -40%; }
+  60%, 100% { left: 120%; }
+}
+
+@keyframes btn-glow {
+  0%, 100% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
+  50% { box-shadow: 0 0 26px var(--wine-glow); }
+}
+
+/* 動きを減らす設定の端末ではアニメーションを止め、すぐ表示する */
+@media (prefers-reduced-motion: reduce) {
+  .splash *, .splash, .start-modal *, .start-modal {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* iPadセンターステージ等の注意書き（白黒ミニマル・控えめな注記） */
